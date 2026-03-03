@@ -108,14 +108,17 @@
   {% if results %}
   <div class="card-npo" style="padding: 0; overflow: hidden;">
     <div class="table-responsive">
-      <table class="table table-hover text-center">
+      <table class="table table-hover text-center" style="white-space: nowrap;">
         <thead>
           <tr>
-            <th class="text-center" style="width: 60px;">#</th>
+            <th class="text-center" style="width: 50px;">#</th>
             <th class="text-start ps-2">Attacker</th>
-            <th>First 24H Hits <br><small style="opacity:.7">(Limit: {{ limit_24h }})</small></th>
-            <th>First 48H Hits <br><small style="opacity:.7">(Limit: {{ limit_48h }})</small></th>
-            <th class="pe-4">Total Overall Hits</th>
+            <th style="border-left: 1px solid rgba(26,34,44,.6);">24H Hits <br><small style="opacity:.7">Limit: {{ limit_24h }}</small></th>
+            <th>48H Hits <br><small style="opacity:.7">Limit: {{ limit_48h }}</small></th>
+            <th style="border-left: 1px solid rgba(26,34,44,.6);">Atk <br><small style="opacity:.7">(20t)</small></th>
+            <th>Ast <br><small style="opacity:.7">(15t)</small></th>
+            <th>Loss <br><small style="opacity:.7">(15t)*</small></th>
+            <th style="border-left: 1px solid rgba(26,34,44,.6); background: rgba(255,217,74,.05); color: var(--npo-accent);">Total<br>Tickets</th>
           </tr>
         </thead>
         <tbody>
@@ -131,17 +134,29 @@
               </a>
             </td>
             
-            <td class="{% if row.over_24h %}cell-over{% else %}cell-safe{% endif %}">
+            <td style="border-left: 1px solid rgba(26,34,44,.4);" class="{% if row.over_24h %}cell-over{% else %}cell-safe{% endif %}">
               {{ row.hits_24h }}
             </td>
             <td class="{% if row.over_48h %}cell-over{% else %}cell-safe{% endif %}">
               {{ row.hits_48h }}
             </td>
-            <td class="pe-4">{{ row.total_hits }}</td>
+
+            <td style="border-left: 1px solid rgba(26,34,44,.4);">{{ row.attacks }}</td>
+            <td>{{ row.assists }}</td>
+            <td class="{% if row.losses > row.paid_losses %}text-danger fw-bold{% endif %}" title="Paid: {{ row.paid_losses }}">
+              {{ row.losses }}
+            </td>
+
+            <td style="border-left: 1px solid rgba(26,34,44,.4); background: rgba(255,217,74,.05); color: var(--npo-accent); font-weight: 800; font-size: 1.1em;">
+              {{ row.tickets }}
+            </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
+    </div>
+    <div style="padding: 12px 20px; font-size: 0.85em; color: var(--npo-sub); border-top: 1px solid rgba(26,34,44,.6);">
+      * Losses count for 15 tickets if they meet the 2/3 rule (Losses &le; 2x Assists). Losses rendered in red indicate the player exceeded the ratio and not all losses were paid out. Hover over a red loss to see how many were paid.
     </div>
   </div>
   {% endif %}
