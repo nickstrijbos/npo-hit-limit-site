@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>MilCom Tools — Tracker</title>
+    <link rel="icon" href="/static/star.png" type="image/png">
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <style>
+      :root{
+        --npo-bg:#0b0f14; --npo-card:#0f141b; --npo-border:#1a222c;
+        --npo-text:#e7eef6; --npo-sub:#a8b3c2; --npo-accent:#ffd94a;
+        --footer-h:44px;
+      }
+      body{
+        margin:0; color:var(--npo-text);
+        background: radial-gradient(1000px 650px at 50% 45%, rgba(255,217,74,.10), transparent 65%),
+                    radial-gradient(1100px 700px at 85% 75%, rgba(42,122,191,.10), transparent 60%),
+                    linear-gradient(180deg, #090d12 0%, #0b0f14 60%, #0a0e13 100%);
+        background-color: var(--npo-bg);
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+      header{position:sticky; top:0; z-index:30; backdrop-filter: blur(6px); background: rgba(9,13,18,.65); border-bottom:1px solid rgba(26,34,44,.6);}
+      .nav-wrap{max-width:1000px; margin:0 auto; padding:14px 20px; display:flex;}
+      .brand{display:flex; gap:10px; color:var(--npo-text); text-decoration:none; font-weight:700;}
+      .brand .star{color:var(--npo-accent)}
+      
+      .shell{max-width:900px; margin:28px auto; padding:0 20px;}
+      .hero{ border:1px solid var(--npo-border); border-radius:16px; padding:28px; margin-bottom: 24px;
+             background: radial-gradient(600px 320px at 78% -10%, rgba(42,122,191,.20), transparent 60%),
+                         linear-gradient(180deg, rgba(18,24,32,.85), rgba(12,18,26,.85)); }
+      h2{font-size:clamp(28px,4.2vw,44px); margin:0}
+      .sub{color:var(--npo-sub)}
+      
+      .card-npo{border:1px solid var(--npo-border); background: linear-gradient(180deg, rgba(18,24,32,.85), rgba(12,18,26,.85)); border-radius:16px; padding:24px;}
+      .btn-npo-primary{display:inline-flex; align-items:center; justify-content:center; border-radius:10px; padding:12px 18px; font-weight:600; 
+                       background: rgba(42,122,191,.2); border:1px solid rgba(42,122,191,.5); color: #8fc1f1; transition:.18s;}
+      .btn-npo-primary:hover{background: rgba(42,122,191,.35); color: #fff; transform:translateY(-1px);}
+      
+      .form-label{font-weight:600; color:var(--npo-sub);}
+      .form-control{background:#0a0f14; color:var(--npo-text); border:1px solid #253041}
+      .form-control:focus{background:#0b1118; color:var(--npo-text); border-color:#2a7abf; box-shadow:0 0 0 .2rem rgba(42,122,191,.25)}
+      
+      .table{color: var(--npo-text); border-color: var(--npo-border); margin-bottom: 0;}
+      .table th { background: rgba(26,34,44,.6); color: var(--npo-sub); border-bottom: 2px solid var(--npo-border); padding: 12px; }
+      .table td { background: transparent; padding: 12px; border-bottom: 1px solid rgba(26,34,44,.4); vertical-align: middle; }
+      .table-hover tbody tr:hover td { background: rgba(255,255,255,.03); color: #fff; }
+      .cell-over { color: #ff5a5a !important; font-weight: 700; background: rgba(255,90,90,.08) !important; border-radius: 4px; }
+      .cell-safe { color: #60e6c2; }
+      
+      footer{ position: fixed; bottom: 0; left: 0; width: 100%; color: var(--npo-sub); background: rgba(9,13,18,.65); border-top: 1px solid rgba(26,34,44,.6); z-index: 20; }
+      .foot-grid{ max-width: 1100px; margin: 0 auto; padding: 8px 20px; display: flex; align-items: center; justify-content: space-between; min-height: var(--footer-h); font-size: .8em; }
+      .profile-link { color: var(--npo-text); text-decoration: none; transition: color 0.15s ease; }
+      .profile-link:hover { color: var(--npo-accent); text-decoration: none; }
+    </style>
+</head>
+<body data-bs-theme="dark">
+
+<header>
+  <div class="nav-wrap"><a href="/" class="brand"><span class="star">★</span> NPO MilCom</a></div>
+</header>
+
+<main class="shell">
+  <div class="hero">
+    <h2>Hit Limit Tracker</h2>
+    <p class="sub mt-2 mb-0">Upload Torn CSV exports to audit faction hit limits across multiple timeframes.</p>
+  </div>
+
+  <div class="card-npo mb-4">
+    <form action="" method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+        
+        {% if error %}
+        <div class="alert alert-danger" style="background: rgba(255,90,90,.1); border-color: #ff5a5a; color: #ff5a5a; font-weight: 600;">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <div class="row g-3 mb-3">
+            <div class="col-md-6">
+            <label for="csv_file" class="form-label">Upload Attacks CSV</label>
+            <input type="file" class="form-control" name="csv_file" id="csv_file" accept=".csv" required>
+            </div>
+            <div class="col-md-6">
+            <label for="defender_faction" class="form-label">Defender Faction <small style="opacity:0.7">(Optional)</small></label>
+            <input type="text" class="form-control" name="defender_faction" value="{{ defender_faction }}" placeholder="e.g. Enemy Faction Name">
+            </div>
+        </div>
+
+        <div class="row g-3 align-items-end">
+            <div class="col-md-4">
+            <label for="limit_24h" class="form-label">Limit: 0-24H</label>
+            <input type="number" class="form-control" name="limit_24h" value="{{ limit_24h }}" required>
+            </div>
+            <div class="col-md-4">
+            <label for="limit_48h" class="form-label">Limit: 0-48H</label>
+            <input type="number" class="form-control" name="limit_48h" value="{{ limit_48h }}" required>
+            </div>
+            <div class="col-md-4">
+            <button type="submit" class="btn-npo-primary w-100">Process Data</button>
+            </div>
+        </div>
+        </form>
+  </div>
+
+  {% if results %}
+  <div class="card-npo" style="padding: 0; overflow: hidden;">
+    <div class="table-responsive">
+      <table class="table table-hover text-center">
+        <thead>
+          <tr>
+            <th class="text-center" style="width: 60px;">#</th>
+            <th class="text-start ps-2">Attacker</th>
+            <th>First 24H Hits <br><small style="opacity:.7">(Limit: {{ limit_24h }})</small></th>
+            <th>First 48H Hits <br><small style="opacity:.7">(Limit: {{ limit_48h }})</small></th>
+            <th class="pe-4">Total Overall Hits</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in results %}
+          <tr>
+            <td class="text-center" style="color: var(--npo-sub); font-weight: 600;">
+              {{ forloop.counter }}
+            </td>
+            
+            <td class="text-start ps-2 fw-bold">
+              <a href="https://www.torn.com/profiles.php?XID={{ row.id }}" target="_blank" class="profile-link">
+                {{ row.name }} [{{ row.id }}]
+              </a>
+            </td>
+            
+            <td class="{% if row.over_24h %}cell-over{% else %}cell-safe{% endif %}">
+              {{ row.hits_24h }}
+            </td>
+            <td class="{% if row.over_48h %}cell-over{% else %}cell-safe{% endif %}">
+              {{ row.hits_48h }}
+            </td>
+            <td class="pe-4">{{ row.total_hits }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</main>
+
+<footer>
+  <div class="foot-grid">
+    <div>&copy; 2026 New Pacific Order</div>
+    <div>MilCom Tools</div>
+  </div>
+</footer>
+
+</body>
+</html>
