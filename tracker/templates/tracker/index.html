@@ -65,7 +65,20 @@
 <main class="shell">
   <div class="hero">
     <h2>Hit Limit Tracker</h2>
-    <p class="sub mt-2 mb-0">Upload Torn CSV exports to audit faction hit limits across multiple timeframes.</p>
+    <p class="sub mt-2 mb-3">Upload YATA CSV exports to audit faction hit limits and calculate ticket payouts.</p>
+    
+    <div class="alert mt-3 mb-0" style="background: rgba(42,122,191,.1); border: 1px solid rgba(42,122,191,.4); color: var(--npo-text); border-radius: 12px; font-size: 0.95em;">
+      <h5 style="color: #8fc1f1; font-weight: 700; font-size: 1.05em; margin-bottom: 12px;">
+        <span style="margin-right: 6px;">ℹ️</span> How to generate the correct CSV
+      </h5>
+      <ol style="margin-bottom: 0; padding-left: 24px; color: var(--npo-sub);">
+        <li class="mb-1">Go to <a href="https://yata.yt/faction/attacks/" target="_blank" style="color: var(--npo-accent); text-decoration: none;">YATA Faction Attacks</a> and click <strong>Create new attacks reports</strong>.</li>
+        <li class="mb-1">Select the exact <strong>Start Time</strong> of the war.</li>
+        <li class="mb-1">Press the <span class="badge" style="background: #e74c3c; color: white;">Live</span> button <em>(Note: YATA cannot create reports longer than 7 days)</em>.</li>
+        <li class="mb-1">Once generated, click the <strong>Eye Icon</strong> to view the report.</li>
+        <li>In the top right corner, click <strong>Export > Attacks</strong>. Upload that downloaded CSV here!</li>
+      </ol>
+    </div>
   </div>
 
   <div class="card-npo mb-4">

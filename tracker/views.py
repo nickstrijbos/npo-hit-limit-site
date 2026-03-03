@@ -36,7 +36,7 @@ def index_view(request):
                     df = pd.read_csv(csv_file, sep=';')
                 
                 if 'timestamp_started' not in df.columns:
-                    raise ValueError("Could not find 'timestamp_started' column. Invalid Torn export.")
+                    raise ValueError("Could not find 'timestamp_started' column. Invalid YATA export.")
 
                 # Force Attacker to be NPO
                 df = df[df['attacker_factionname'].astype(str).str.contains('NPO', case=False, na=False)]
