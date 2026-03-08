@@ -119,22 +119,25 @@
   </div>
 
   {% if results %}
+  <div class="mb-3">
+    <a href="/" class="btn-npo-primary" style="text-decoration: none;">↺ Upload New CSV</a>
+  </div>
   <div class="card-npo" style="padding: 0; overflow: hidden;">
     <div class="table-responsive">
       <table class="table table-hover text-center" style="white-space: nowrap;">
         <thead>
           <tr>
-            <th class="text-center" style="width: 50px;">#</th>
-            <th class="text-start ps-2">Attacker</th>
-            <th style="border-left: 1px solid rgba(26,34,44,.6);">24H Hits <br><small style="opacity:.7">Limit: {{ limit_24h }}</small></th>
-            <th>48H Hits <br><small style="opacity:.7">Limit: {{ limit_48h }}</small></th>
-            <th style="border-left: 1px solid rgba(26,34,44,.6);">Atk <br><small style="opacity:.7">(20t)</small></th>
-            <th>Ast <br><small style="opacity:.7">(15t)</small></th>
-            <th>Loss <br><small style="opacity:.7">(15t)*</small></th>
-            <th style="border-left: 1px solid rgba(26,34,44,.6); background: rgba(255,217,74,.05); color: var(--npo-accent);">Total<br>Tickets</th>
+            <th class="text-center" style="width: 50px; cursor: default;">#</th>
+            <th class="text-start ps-2" data-sort="name" style="cursor: pointer;">Attacker ⇅</th>
+            <th data-sort="hits_24h" style="border-left: 1px solid rgba(26,34,44,.6); cursor: pointer;">24H Hits ⇅<br><small style="opacity:.7">Limit: {{ limit_24h }}</small></th>
+            <th data-sort="hits_48h" style="cursor: pointer;">48H Hits ⇅<br><small style="opacity:.7">Limit: {{ limit_48h }}</small></th>
+            <th data-sort="attacks" style="border-left: 1px solid rgba(26,34,44,.6); cursor: pointer;">Atk ⇅<br><small style="opacity:.7">(20t)</small></th>
+            <th data-sort="assists" style="cursor: pointer;">Ast ⇅<br><small style="opacity:.7">(15t)</small></th>
+            <th data-sort="losses" style="cursor: pointer;">Loss ⇅<br><small style="opacity:.7">(15t)*</small></th>
+            <th data-sort="tickets" style="border-left: 1px solid rgba(26,34,44,.6); background: rgba(255,217,74,.05); color: var(--npo-accent); cursor: pointer;">Total<br>Tickets ⇅</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="results-body">
           {% for row in results %}
           <tr>
             <td class="text-center" style="color: var(--npo-sub); font-weight: 600;">
@@ -181,6 +184,58 @@
     <div>MilCom Tools</div>
   </div>
 </footer>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const tbody = document.getElementById('results-body');
+  if (!tbody) return;
+  
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  let sortCol = 'tickets';
+  let sortAsc = false;
+  
+  function getCellValue(row, col) {
+    const cells = row.querySelectorAll('td');
+    switch(col) {
+      case 'name': return cells[1].textContent.toLowerCase();
+      case 'hits_24h': return parseInt(cells[2].textContent) || 0;
+      case 'hits_48h': return parseInt(cells[3].textContent) || 0;
+      case 'attacks': return parseInt(cells[4].textContent) || 0;
+      case 'assists': return parseInt(cells[5].textContent) || 0;
+      case 'losses': return parseInt(cells[6].textContent) || 0;
+      case 'tickets': return parseInt(cells[7].textContent) || 0;
+      default: return 0;
+    }
+  }
+  
+  function sortTable(col) {
+    if (sortCol === col) {
+      sortAsc = !sortAsc;
+    } else {
+      sortCol = col;
+      sortAsc = false;
+    }
+    
+    rows.sort((a, b) => {
+      const aVal = getCellValue(a, sortCol);
+      const bVal = getCellValue(b, sortCol);
+      if (typeof aVal === 'string') {
+        return sortAsc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      }
+      return sortAsc ? aVal - bVal : bVal - aVal;
+    });
+    
+    rows.forEach((row, i) => {
+      row.querySelector('td').textContent = i + 1;
+      tbody.appendChild(row);
+    });
+  }
+  
+  document.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => sortTable(th.dataset.sort));
+  });
+});
+</script>
 
 </body>
 </html>
