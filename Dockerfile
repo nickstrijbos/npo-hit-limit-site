@@ -1,32 +1,48 @@
-# Use official Python lightweight runtime
-FROM python:3.13-slim
+# Stage 1: Build dependencies
+FROM python:3.13-slim AS builder
 
-# Set environment variables for Python & Django
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-ENV DJANGO_SETTINGS_MODULE=milcom_project.settings
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONHASHSEED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Set the working directory inside the container
 WORKDIR /app
 
-# Install system dependencies (C compiler is often needed for Pandas/Numpy)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY requirements.txt /app/
-RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
+COPY requirements.txt .
+RUN pip install --upgrade pip && \
+    pip install -r requirements.txt gunicorn && \
+    pip cache purge
 
-# Install Gunicorn for production serving
-RUN pip install gunicorn
+# Stage 2: Production image
+FROM python:3.13-slim
 
-# Copy the entire Django project
-COPY . /app/
+# Runtime configuration (override via -e flag or k8s env vars)
+# ENV DEBUG=False
+# ENV ALLOWED_HOSTS=hitlimit.strijbos.me,other.com
+# ENV CSRF_TRUSTED_ORIGINS=https://hitlimit.strijbos.me
 
-# Expose the port Gunicorn runs on
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONHASHSEED=1 \
+    DJANGO_SETTINGS_MODULE=milcom_project.settings
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --shell /bin/bash appuser
+
+COPY --from=builder /app /app
+
+RUN chown -R appuser:appuser /app
+
+USER appuser
+
 EXPOSE 8000
 
-# Run the Django application via Gunicorn
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "milcom_project.wsgi:application"]
