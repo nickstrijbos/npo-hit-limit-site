@@ -43,7 +43,7 @@ def index_view(request):
 
                 # Filter by Defender Faction (solves the "outside hits" problem)
                 if defender_faction:
-                    df = df[df['defender_factionname'].astype(str).str.contains(defender_faction, case=False, na=False)]
+                    df = df[df['defender_faction'].astype(str) == defender_faction]
 
                 if df.empty:
                     raise ValueError(f"No NPO attacks found against '{defender_faction}'.")
@@ -53,7 +53,7 @@ def index_view(request):
                 war_start_time = df['timestamp_started'].min()
 
                 # Filter valid hits for tickets (Attacked, Assist, AND Lost)
-                df_valid = df[df['result'].isin(['Attacked', 'Assist', 'Lost'])].copy()
+                df_valid = df[df['result'].isin(['Attacked', 'Hospitalized'])].copy()
                 
                 if df_valid.empty:
                     raise ValueError(f"No valid attacks found against '{defender_faction}'.")
@@ -65,8 +65,8 @@ def index_view(request):
                 
                 for (attacker_id, attacker_name), group in grouped:
                     
-                    # --- LIMIT CALCULATOR (Only Attacks + Assists) ---
-                    limit_group = group[group['result'].isin(['Attacked', 'Assist'])]
+                    # --- LIMIT CALCULATOR (Attacked + Hospitalized) ---
+                    limit_group = group[group['result'].isin(['Attacked', 'Hospitalized'])]
                     hits_24h = len(limit_group[limit_group['hours_since_start'] <= 24])
                     hits_48h = len(limit_group[limit_group['hours_since_start'] <= 48])
                     
