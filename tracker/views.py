@@ -12,29 +12,29 @@ def index_view(request):
 
     if request.method == 'POST':
         csv_file = request.FILES.get('csv_file')
-        
+
         # KEEP STATE: Grab the values so we can pass them right back to the form
         limit_24h = int(request.POST.get('limit_24h', 15))
         limit_48h = int(request.POST.get('limit_48h', 25))
         defender_faction = request.POST.get('defender_faction', '').strip()
-        
+
         # Update context immediately so the form doesn't clear if there's an error
         context.update({
             'limit_24h': limit_24h,
             'limit_48h': limit_48h,
             'defender_faction': defender_faction,
         })
-        
+
         if csv_file:
             try:
                 # 1. Try reading with standard commas
                 df = pd.read_csv(csv_file)
-                
+
                 # 2. Try semicolons if needed
                 if 'timestamp_started' not in df.columns:
                     csv_file.seek(0)
                     df = pd.read_csv(csv_file, sep=';')
-                
+
                 if 'timestamp_started' not in df.columns:
                     raise ValueError("Could not find 'timestamp_started' column. Invalid YATA export.")
 
@@ -53,8 +53,8 @@ def index_view(request):
                 war_start_time = df['timestamp_started'].min()
 
                 # Filter valid hits for tickets (Attacked, Assist, AND Lost)
-                df_valid = df[df['result'].isin(['Attacked', 'Hospitalized'])].copy()
-                
+                df_valid = df[df['result'].isin(['Attacked', 'Hospitalized', 'Assist', 'Lost'])].copy()
+
                 if df_valid.empty:
                     raise ValueError(f"No valid attacks found against '{defender_faction}'.")
 
@@ -62,23 +62,22 @@ def index_view(request):
 
                 results = []
                 grouped = df_valid.groupby(['attacker_id', 'attacker_name'])
-                
+
                 for (attacker_id, attacker_name), group in grouped:
-                    
-                    # --- LIMIT CALCULATOR (Attacked + Hospitalized) ---
-                    limit_group = group[group['result'].isin(['Attacked', 'Hospitalized'])]
-                    hits_24h = len(limit_group[limit_group['hours_since_start'] <= 24])
-                    hits_48h = len(limit_group[limit_group['hours_since_start'] <= 48])
-                    
+
+                    # --- LIMIT CALCULATOR (Attacked + Hospitalized + Assist) ---
+                    hits_24h = len(group[(group['result'].isin(['Attacked', 'Hospitalized', 'Assist'])) & (group['hours_since_start'] <= 24)])
+                    hits_48h = len(group[(group['result'].isin(['Attacked', 'Hospitalized', 'Assist'])) & (group['hours_since_start'] <= 48)])
+
                     # --- TICKET CALCULATOR (Breakdown) ---
-                    attacks = len(group[group['result'] == 'Attacked'])
+                    attacks = len(group[group['result'].isin(['Attacked', 'Hospitalized'])])
                     assists = len(group[group['result'] == 'Assist'])
                     losses = len(group[group['result'] == 'Lost'])
 
                     # 2/3 Rule Logic: Losses must be <= 2x Assists
                     # (e.g. 1 assist allows up to 2 paid losses. If 3 losses, 1 goes unpaid).
                     paid_losses = losses if losses <= (assists * 2) else (assists * 2)
-                    
+
                     # Calculate total tickets
                     tickets = (attacks * 20) + (assists * 15) + (paid_losses * 15)
 
