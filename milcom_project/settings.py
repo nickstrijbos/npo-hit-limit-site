@@ -26,9 +26,9 @@ SECRET_KEY = 'django-insecure-^ao_4*=tee)dj1k$%sd&a8ac9zv$f$wrhn2@b5!+cx5pcrvcq9
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '192.168.1.200,hitlimit.strijbos.me,localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '192.168.1.200,hitlimit.sterus.dev,localhost,127.0.0.1').split(',')
 
-CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'https://hitlimit.strijbos.me').split(',')
+CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'https://hitlimit.sterus.dev').split(',')
 
 
 # Application definition

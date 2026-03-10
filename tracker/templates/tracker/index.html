@@ -103,16 +103,24 @@
         </div>
 
         <div class="row g-3 align-items-end">
-            <div class="col-md-4">
+            <div class="col-md-3">
             <label for="limit_24h" class="form-label">Limit: 0-24H</label>
             <input type="number" class="form-control" name="limit_24h" value="{{ limit_24h }}" required>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
             <label for="limit_48h" class="form-label">Limit: 0-48H</label>
             <input type="number" class="form-control" name="limit_48h" value="{{ limit_48h }}" required>
             </div>
             <div class="col-md-4">
             <button type="submit" class="btn-npo-primary w-100">Process Data</button>
+            </div>
+            <div class="col-md-2">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="show_tickets" id="show_tickets" {% if show_tickets %}checked{% endif %}>
+                <label class="form-check-label" for="show_tickets">
+                Show Tickets
+                </label>
+            </div>
             </div>
         </div>
         </form>
@@ -134,7 +142,9 @@
             <th data-sort="attacks" style="border-left: 1px solid rgba(26,34,44,.6); cursor: pointer;">Atk ⇅<br><small style="opacity:.7">(20t)</small></th>
             <th data-sort="assists" style="cursor: pointer;">Ast ⇅<br><small style="opacity:.7">(15t)</small></th>
             <th data-sort="losses" style="cursor: pointer;">Loss ⇅<br><small style="opacity:.7">(15t)*</small></th>
+            {% if show_tickets %}
             <th data-sort="tickets" style="border-left: 1px solid rgba(26,34,44,.6); background: rgba(255,217,74,.05); color: var(--npo-accent); cursor: pointer;">Total<br>Tickets ⇅</th>
+            {% endif %}
           </tr>
         </thead>
         <tbody id="results-body">
@@ -163,17 +173,21 @@
               {{ row.losses }}
             </td>
 
+            {% if show_tickets %}
             <td style="border-left: 1px solid rgba(26,34,44,.4); background: rgba(255,217,74,.05); color: var(--npo-accent); font-weight: 800; font-size: 1.1em;">
               {{ row.tickets }}
             </td>
+            {% endif %}
           </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
+    {% if show_tickets %}
     <div style="padding: 12px 20px; font-size: 0.85em; color: var(--npo-sub); border-top: 1px solid rgba(26,34,44,.6);">
       * Losses count for 15 tickets if they meet the 2/3 rule (Losses &le; 2x Assists). Losses rendered in red indicate the player exceeded the ratio and not all losses were paid out. Hover over a red loss to see how many were paid.
     </div>
+    {% endif %}
   </div>
   {% endif %}
 </main>
@@ -191,7 +205,12 @@ document.addEventListener('DOMContentLoaded', function() {
   if (!tbody) return;
   
   const rows = Array.from(tbody.querySelectorAll('tr'));
-  let sortCol = 'tickets';
+  
+  // Check if tickets column exists (feature flag)
+  const hasTickets = document.querySelector('th[data-sort="tickets"]') !== null;
+  const ticketIndex = hasTickets ? 7 : -1;
+  
+  let sortCol = hasTickets ? 'tickets' : 'hits_48h';
   let sortAsc = false;
   
   function getCellValue(row, col) {
@@ -203,7 +222,7 @@ document.addEventListener('DOMContentLoaded', function() {
       case 'attacks': return parseInt(cells[4].textContent) || 0;
       case 'assists': return parseInt(cells[5].textContent) || 0;
       case 'losses': return parseInt(cells[6].textContent) || 0;
-      case 'tickets': return parseInt(cells[7].textContent) || 0;
+      case 'tickets': return ticketIndex > 0 ? (parseInt(cells[ticketIndex].textContent) || 0) : 0;
       default: return 0;
     }
   }

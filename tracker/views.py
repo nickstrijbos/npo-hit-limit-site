@@ -6,6 +6,7 @@ def index_view(request):
         'limit_24h': 15,
         'limit_48h': 25,
         'defender_faction': '',
+        'show_tickets': False,
         'results': None,
         'error': None
     }
@@ -17,12 +18,14 @@ def index_view(request):
         limit_24h = int(request.POST.get('limit_24h', 15))
         limit_48h = int(request.POST.get('limit_48h', 25))
         defender_faction = request.POST.get('defender_faction', '').strip()
+        show_tickets = request.POST.get('show_tickets') == 'on'
 
         # Update context immediately so the form doesn't clear if there's an error
         context.update({
             'limit_24h': limit_24h,
             'limit_48h': limit_48h,
             'defender_faction': defender_faction,
+            'show_tickets': show_tickets,
         })
 
         if csv_file:
@@ -74,12 +77,17 @@ def index_view(request):
                     assists = len(group[group['result'] == 'Assist'])
                     losses = len(group[group['result'] == 'Lost'])
 
-                    # 2/3 Rule Logic: Losses must be <= 2x Assists
-                    # (e.g. 1 assist allows up to 2 paid losses. If 3 losses, 1 goes unpaid).
-                    paid_losses = losses if losses <= (assists * 2) else (assists * 2)
+                    # Calculate tickets only if feature flag is enabled
+                    if show_tickets:
+                        # 2/3 Rule Logic: Losses must be <= 2x Assists
+                        # (e.g. 1 assist allows up to 2 paid losses. If 3 losses, 1 goes unpaid).
+                        paid_losses = losses if losses <= (assists * 2) else (assists * 2)
 
-                    # Calculate total tickets
-                    tickets = (attacks * 20) + (assists * 15) + (paid_losses * 15)
+                        # Calculate total tickets
+                        tickets = (attacks * 20) + (assists * 15) + (paid_losses * 15)
+                    else:
+                        paid_losses = 0
+                        tickets = 0
 
                     results.append({
                         'id': attacker_id,
