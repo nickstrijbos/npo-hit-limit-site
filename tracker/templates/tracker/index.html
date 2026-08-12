@@ -38,17 +38,23 @@
       .btn-npo-primary{display:inline-flex; align-items:center; justify-content:center; border-radius:10px; padding:12px 18px; font-weight:600; 
                        background: rgba(42,122,191,.2); border:1px solid rgba(42,122,191,.5); color: #8fc1f1; transition:.18s;}
       .btn-npo-primary:hover{background: rgba(42,122,191,.35); color: #fff; transform:translateY(-1px);}
+      .btn-npo-primary:disabled{opacity:.5; pointer-events:none;}
+      
+      .tab-btn{flex:1; opacity:.45; border-radius:10px !important; margin:0 3px;}
+      .tab-btn.active{opacity:1; background: rgba(42,122,191,.35); color:#fff;}
       
       .form-label{font-weight:600; color:var(--npo-sub);}
       .form-control{background:#0a0f14; color:var(--npo-text); border:1px solid #253041}
       .form-control:focus{background:#0b1118; color:var(--npo-text); border-color:#2a7abf; box-shadow:0 0 0 .2rem rgba(42,122,191,.25)}
       
       .table{color: var(--npo-text); border-color: var(--npo-border); margin-bottom: 0;}
-      .table th { background: rgba(26,34,44,.6); color: var(--npo-sub); border-bottom: 2px solid var(--npo-border); padding: 12px; }
-      .table td { background: transparent; padding: 12px; border-bottom: 1px solid rgba(26,34,44,.4); vertical-align: middle; }
+      .table th { background: rgba(26,34,44,.6); color: var(--npo-sub); border-bottom: 2px solid var(--npo-border); padding: 8px 10px; }
+      .table td { background: transparent; padding: 8px 10px; border-bottom: 1px solid rgba(26,34,44,.4); vertical-align: middle; }
       .table-hover tbody tr:hover td { background: rgba(255,255,255,.03); color: #fff; }
       .cell-over { color: #ff5a5a !important; font-weight: 700; background: rgba(255,90,90,.08) !important; border-radius: 4px; }
       .cell-safe { color: #60e6c2; }
+      
+      .meta-bar{font-size:.9em; color:var(--npo-sub); border-bottom:1px solid rgba(26,34,44,.6); padding:12px 20px;}
       
       footer{ position: fixed; bottom: 0; left: 0; width: 100%; color: var(--npo-sub); background: rgba(9,13,18,.65); border-top: 1px solid rgba(26,34,44,.6); z-index: 20; }
       .foot-grid{ max-width: 1100px; margin: 0 auto; padding: 8px 20px; display: flex; align-items: center; justify-content: space-between; min-height: var(--footer-h); font-size: .8em; }
@@ -65,25 +71,13 @@
 <main class="shell">
   <div class="hero">
     <h2>Hit Limit Tracker</h2>
-    <p class="sub mt-2 mb-3">Upload YATA CSV exports to audit faction hit limits and calculate ticket payouts.</p>
-    
-    <div class="alert mt-3 mb-0" style="background: rgba(42,122,191,.1); border: 1px solid rgba(42,122,191,.4); color: var(--npo-text); border-radius: 12px; font-size: 0.95em;">
-      <h5 style="color: #8fc1f1; font-weight: 700; font-size: 1.05em; margin-bottom: 12px;">
-        <span style="margin-right: 6px;">ℹ️</span> How to generate the correct CSV
-      </h5>
-      <ol style="margin-bottom: 0; padding-left: 24px; color: var(--npo-sub);">
-        <li class="mb-1">Go to <a href="https://yata.yt/faction/attacks/" target="_blank" style="color: var(--npo-accent); text-decoration: none;">YATA Faction Attacks</a> and click <strong>Create new attacks reports</strong>.</li>
-        <li class="mb-1">Select the exact <strong>Start Time</strong> of the war.</li>
-        <li class="mb-1">Press the <span class="badge" style="background: #e74c3c; color: white;">Live</span> button <em>(Note: YATA cannot create reports longer than 7 days)</em>.</li>
-        <li class="mb-1">Once generated, click the <strong>Eye Icon</strong> to view the report.</li>
-        <li>In the top right corner, click <strong>Export > Attacks</strong>. Upload that downloaded CSV here!</li>
-      </ol>
-    </div>
+    <p class="sub mt-2 mb-3">Audit faction hit limits and ticket payouts from YATA CSV exports or live from the Torn API.</p>
   </div>
 
   <div class="card-npo mb-4">
-    <form action="" method="POST" enctype="multipart/form-data">
+    <form id="tracker-form" action="" method="POST" enctype="multipart/form-data">
         {% csrf_token %}
+        <input type="hidden" name="mode" id="mode-input" value="{{ mode }}">
         
         {% if error %}
         <div class="alert alert-danger" style="background: rgba(255,90,90,.1); border-color: #ff5a5a; color: #ff5a5a; font-weight: 600;">
@@ -91,57 +85,129 @@
         </div>
         {% endif %}
 
-        <div class="row g-3 mb-3">
-            <div class="col-md-6">
-            <label for="csv_file" class="form-label">Upload Attacks CSV</label>
-            <input type="file" class="form-control" name="csv_file" id="csv_file" accept=".csv" required>
+        <div class="btn-group d-flex mb-4" role="group">
+            <button type="button" id="tab-live" class="btn-npo-primary tab-btn {% if mode == 'live' %}active{% endif %}">Live API</button>
+            <button type="button" id="tab-csv" class="btn-npo-primary tab-btn {% if mode != 'live' %}active{% endif %}">CSV Upload</button>
+        </div>
+
+        <div id="csv-section" {% if mode == 'live' %}class="d-none"{% endif %}>
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label for="csv_file" class="form-label">Upload Attacks CSV</label>
+                    <input type="file" class="form-control" name="csv_file" id="csv_file" accept=".csv" required>
+                </div>
             </div>
-            <div class="col-md-6">
-            <label for="defender_faction" class="form-label">Defender Faction ID<small style="opacity:0.7">(Optional)</small></label>
-            <input type="text" class="form-control" name="defender_faction" value="{{ defender_faction }}" placeholder="e.g. 10123">
+            <div class="alert mb-0" style="background: rgba(42,122,191,.1); border: 1px solid rgba(42,122,191,.4); color: var(--npo-text); border-radius: 12px; font-size: 0.95em;">
+                <h5 style="color: #8fc1f1; font-weight: 700; font-size: 1.05em; margin-bottom: 12px;">
+                    <span style="margin-right: 6px;">ℹ️</span> How to generate the correct CSV
+                </h5>
+                <ol style="margin-bottom: 0; padding-left: 24px; color: var(--npo-sub);">
+                    <li class="mb-1">Go to <a href="https://yata.yt/faction/attacks/" target="_blank" style="color: var(--npo-accent); text-decoration: none;">YATA Faction Attacks</a> and click <strong>Create new attacks reports</strong>.</li>
+                    <li class="mb-1">Select the exact <strong>Start Time</strong> of the war.</li>
+                    <li class="mb-1">Press the <span class="badge" style="background: #e74c3c; color: white;">Live</span> button <em>(Note: YATA cannot create reports longer than 7 days)</em>.</li>
+                    <li class="mb-1">Once generated, click the <strong>Eye Icon</strong> to view the report.</li>
+                    <li>In the top right corner, click <strong>Export > Attacks</strong>. Upload that downloaded CSV here!</li>
+                </ol>
             </div>
         </div>
 
-        <div class="row g-3 align-items-end">
+        <div id="live-section" {% if mode != 'live' %}class="d-none"{% endif %}>
+            <div class="row g-3 mb-3">
+                <div class="col-md-7">
+                    <label for="api-key" class="form-label">Torn API Key <small style="opacity:0.7">(Limited access)</small></label>
+                    <input type="password" class="form-control" id="api-key" placeholder="16-character API key" autocomplete="off">
+                    <small style="opacity:.75; color: var(--npo-sub);">
+                        Your key never leaves your browser — it is stored in <code>localStorage</code> and is not sent to this site.
+                        Generate one at torn.com with limited access.
+                    </small>
+                </div>
+                <div class="col-md-5 d-flex align-items-end">
+                    <button type="button" id="detect-war" class="btn-npo-primary w-100">Detect War</button>
+                </div>
+            </div>
+
+            <div id="war-info" class="d-none alert mb-3" style="background: rgba(42,122,191,.1); border: 1px solid rgba(42,122,191,.4); color: var(--npo-text); border-radius: 12px; font-size: .95em;"></div>
+            <div id="live-error" class="d-none alert mb-3" style="background: rgba(255,90,90,.1); border: 1px solid rgba(255,90,90,.4); color: #ff5a5a; border-radius: 12px; font-size: .95em; font-weight: 600;"></div>
+
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label for="war-start-manual" class="form-label">Manual War Start <small style="opacity:0.7">(optional, UTC)</small></label>
+                    <input type="datetime-local" class="form-control" name="manual_start" id="war-start-manual" value="{{ manual_start }}">
+                </div>
+                <div class="col-md-6">
+                    <label for="war-end-manual" class="form-label">Manual War End <small style="opacity:0.7">(optional, UTC)</small></label>
+                    <input type="datetime-local" class="form-control" name="manual_end" id="war-end-manual" value="{{ manual_end }}">
+                </div>
+            </div>
+
+            <div id="fetch-progress-wrap" class="d-none mb-3">
+                <div class="progress" style="height: 8px; background:#0a0f14; border:1px solid #253041;">
+                    <div id="fetch-progress-bar" class="progress-bar" style="width:0%; background:#2a7abf;"></div>
+                </div>
+                <div id="fetch-progress-text" class="mt-1" style="color:var(--npo-sub); font-size:.9em;"></div>
+            </div>
+
+            <input type="hidden" name="war_start" id="war-start-ts" value="{{ war_start_ts }}">
+            <input type="hidden" name="war_end" id="war-end-ts" value="{{ war_end_ts }}">
+            <input type="hidden" name="war_name" id="war-name-hidden" value="{{ war_name }}">
+            <input type="hidden" name="war_opponent" id="war-opp-hidden" value="{{ war_opponent }}">
+            <input type="hidden" name="attacks" id="attacks-hidden">
+        </div>
+
+        <div class="row g-3 align-items-end mt-1">
             <div class="col-md-3">
-            <label for="limit_24h" class="form-label">Limit: 0-24H</label>
-            <input type="number" class="form-control" name="limit_24h" value="{{ limit_24h }}" required>
+                <label for="defender_faction" class="form-label">Defender Faction ID<small style="opacity:0.7">(Optional)</small></label>
+                <input type="text" class="form-control" name="defender_faction" id="defender_faction" value="{{ defender_faction }}" placeholder="e.g. 10123">
             </div>
             <div class="col-md-3">
-            <label for="limit_48h" class="form-label">Limit: 0-48H</label>
-            <input type="number" class="form-control" name="limit_48h" value="{{ limit_48h }}" required>
+                <label for="limit_24h" class="form-label">Limit: 0-24H</label>
+                <input type="number" class="form-control" name="limit_24h" id="limit_24h" value="{{ limit_24h }}" required>
             </div>
-            <div class="col-md-4">
-            <button type="submit" class="btn-npo-primary w-100">Process Data</button>
+            <div class="col-md-3">
+                <label for="limit_48h" class="form-label">Limit: 0-48H</label>
+                <input type="number" class="form-control" name="limit_48h" id="limit_48h" value="{{ limit_48h }}" required>
             </div>
-            <div class="col-md-2">
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="show_tickets" id="show_tickets" {% if show_tickets %}checked{% endif %}>
-                <label class="form-check-label" for="show_tickets">
-                Show Tickets
-                </label>
-            </div>
+            <div class="col-md-3">
+                <div class="form-check mb-1">
+                    <input class="form-check-input" type="checkbox" name="show_tickets" id="show_tickets" {% if show_tickets %}checked{% endif %}>
+                    <label class="form-check-label" for="show_tickets">
+                    Show Tickets
+                    </label>
+                </div>
+                <button type="submit" id="submit-btn" class="btn-npo-primary w-100">{% if mode == 'live' %}Fetch &amp; Process{% else %}Process Data{% endif %}</button>
             </div>
         </div>
         </form>
   </div>
 
   {% if results %}
-  <div class="mb-3">
-    <a href="/" class="btn-npo-primary" style="text-decoration: none;">↺ Upload New CSV</a>
+  <div class="mb-3 d-flex gap-2">
+    <a href="/" class="btn-npo-primary" style="text-decoration: none;">↺ Start Over</a>
+    {% if mode == 'live' %}
+    <button type="button" id="refresh-live" class="btn-npo-primary">↺ Refresh Live</button>
+    {% endif %}
   </div>
   <div class="card-npo" style="padding: 0; overflow: hidden;">
+    {% if meta %}
+    <div class="meta-bar">
+        <strong style="color: var(--npo-text);">{{ meta.fetched }} attacks</strong>
+        {% if meta.warnings %} ({{ meta.warnings }} malformed rows dropped){% endif %}
+        — window {{ meta.window_start }} → {{ meta.window_end }}
+        {% if meta.war %} · War: {{ meta.war }}{% endif %}
+    </div>
+    {% endif %}
     <div class="table-responsive">
-      <table class="table table-hover text-center" style="white-space: nowrap;">
+      <table class="table table-hover text-center">
         <thead>
           <tr>
-            <th class="text-center" style="width: 50px; cursor: default;">#</th>
-            <th class="text-start ps-2" data-sort="name" style="cursor: pointer;">Attacker ⇅</th>
+            <th class="text-center" style="width: 40px; cursor: default;">#</th>
+            <th class="text-start ps-2" data-sort="name" style="cursor: pointer; white-space: nowrap;">Attacker ⇅</th>
             <th data-sort="hits_24h" style="border-left: 1px solid rgba(26,34,44,.6); cursor: pointer;">24H Hits ⇅<br><small style="opacity:.7">Limit: {{ limit_24h }}</small></th>
             <th data-sort="hits_48h" style="cursor: pointer;">48H Hits ⇅<br><small style="opacity:.7">Limit: {{ limit_48h }}</small></th>
             <th data-sort="attacks" style="border-left: 1px solid rgba(26,34,44,.6); cursor: pointer;">Atk ⇅<br><small style="opacity:.7">(20t)</small></th>
-            <th data-sort="assists" style="cursor: pointer;">Ast ⇅<br><small style="opacity:.7">(15t)</small></th>
+            <th data-sort="assists" style="cursor: pointer;">Ast ⇅<br><small style="opacity:.7">(15t)*</small></th>
             <th data-sort="losses" style="cursor: pointer;">Loss ⇅<br><small style="opacity:.7">(15t)*</small></th>
+            <th data-sort="respect" style="cursor: pointer;">Respect ⇅<br><small style="opacity:.7">gain</small></th>
             {% if show_tickets %}
             <th data-sort="tickets" style="border-left: 1px solid rgba(26,34,44,.6); background: rgba(255,217,74,.05); color: var(--npo-accent); cursor: pointer;">Total<br>Tickets ⇅</th>
             {% endif %}
@@ -154,7 +220,7 @@
               {{ forloop.counter }}
             </td>
             
-            <td class="text-start ps-2 fw-bold">
+            <td class="text-start ps-2 fw-bold" style="white-space: nowrap;">
               <a href="https://www.torn.com/profiles.php?XID={{ row.id }}" target="_blank" class="profile-link">
                 {{ row.name }} [{{ row.id }}]
               </a>
@@ -169,9 +235,8 @@
 
             <td style="border-left: 1px solid rgba(26,34,44,.4);">{{ row.attacks }}</td>
             <td>{{ row.assists }}</td>
-            <td class="{% if row.losses > row.paid_losses %}text-danger fw-bold{% endif %}" title="Paid: {{ row.paid_losses }}">
-              {{ row.losses }}
-            </td>
+            <td>{{ row.losses }}</td>
+            <td style="color: var(--npo-accent);">{{ row.respect|floatformat:2 }}</td>
 
             {% if show_tickets %}
             <td style="border-left: 1px solid rgba(26,34,44,.4); background: rgba(255,217,74,.05); color: var(--npo-accent); font-weight: 800; font-size: 1.1em;">
@@ -185,7 +250,7 @@
     </div>
     {% if show_tickets %}
     <div style="padding: 12px 20px; font-size: 0.85em; color: var(--npo-sub); border-top: 1px solid rgba(26,34,44,.6);">
-      * Losses count for 15 tickets if they meet the 2/3 rule (Losses &le; 2x Assists). Losses rendered in red indicate the player exceeded the ratio and not all losses were paid out. Hover over a red loss to see how many were paid.
+      * Assists count for 15 tickets. Losses count for 15 tickets.
     </div>
     {% endif %}
   </div>
@@ -200,60 +265,307 @@
 </footer>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-  const tbody = document.getElementById('results-body');
-  if (!tbody) return;
-  
-  const rows = Array.from(tbody.querySelectorAll('tr'));
-  
-  // Check if tickets column exists (feature flag)
-  const hasTickets = document.querySelector('th[data-sort="tickets"]') !== null;
-  const ticketIndex = hasTickets ? 7 : -1;
-  
-  let sortCol = hasTickets ? 'tickets' : 'hits_48h';
-  let sortAsc = false;
-  
-  function getCellValue(row, col) {
-    const cells = row.querySelectorAll('td');
-    switch(col) {
-      case 'name': return cells[1].textContent.toLowerCase();
-      case 'hits_24h': return parseInt(cells[2].textContent) || 0;
-      case 'hits_48h': return parseInt(cells[3].textContent) || 0;
-      case 'attacks': return parseInt(cells[4].textContent) || 0;
-      case 'assists': return parseInt(cells[5].textContent) || 0;
-      case 'losses': return parseInt(cells[6].textContent) || 0;
-      case 'tickets': return ticketIndex > 0 ? (parseInt(cells[ticketIndex].textContent) || 0) : 0;
-      default: return 0;
+(function() {
+  'use strict';
+
+  const TORN_API = 'https://api.torn.com/v2';
+  const KEY_STORE = 'torn_tracker_api_key';
+  const PAGE_SIZE = 100;
+  const PAGE_PACING_MS = 400;
+  const MAX_PAGES = 90;
+
+  const $ = (sel) => document.querySelector(sel);
+
+  const els = {
+    form: $('#tracker-form'),
+    modeInput: $('#mode-input'),
+    tabCsv: $('#tab-csv'),
+    tabLive: $('#tab-live'),
+    csvSection: $('#csv-section'),
+    liveSection: $('#live-section'),
+    submitBtn: $('#submit-btn'),
+    keyInput: $('#api-key'),
+    detectBtn: $('#detect-war'),
+    warInfo: $('#war-info'),
+    liveError: $('#live-error'),
+    manualStart: $('#war-start-manual'),
+    manualEnd: $('#war-end-manual'),
+    warStartTs: $('#war-start-ts'),
+    warEndTs: $('#war-end-ts'),
+    warNameHidden: $('#war-name-hidden'),
+    warOppHidden: $('#war-opp-hidden'),
+    attacksHidden: $('#attacks-hidden'),
+    progressWrap: $('#fetch-progress-wrap'),
+    progressBar: $('#fetch-progress-bar'),
+    progressText: $('#fetch-progress-text'),
+    refreshBtn: $('#refresh-live'),
+  };
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  function fmtTs(ts) {
+    if (!ts) return '';
+    const d = new Date(ts * 1000);
+    return isNaN(d) ? String(ts) : d.toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+  }
+
+  function dtLocalToUnix(value) {
+    if (!value) return null;
+    const m = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    if (!m) return null;
+    return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) / 1000;
+  }
+
+  function saveKey() {
+    try { localStorage.setItem(KEY_STORE, els.keyInput.value.trim()); } catch (e) { /* private mode */ }
+  }
+
+  function showWarInfo(html) {
+    els.warInfo.innerHTML = html;
+    els.warInfo.classList.remove('d-none');
+  }
+
+  function showLiveError(msg) {
+    els.liveError.textContent = msg;
+    els.liveError.classList.remove('d-none');
+  }
+
+  function clearLiveError() {
+    els.liveError.classList.add('d-none');
+  }
+
+  function setBusy(btn, busy, label) {
+    if (!btn) return;
+    btn.disabled = busy;
+    if (label !== undefined) btn.textContent = label;
+  }
+
+  function friendlyError(code, raw) {
+    switch (code) {
+      case 1: return 'API key missing — re-enter your key.';
+      case 2: return 'Invalid API key — check the key and try again.';
+      case 5: return 'Rate limited by the Torn API — wait a minute and try again.';
+      case 16: return 'Key access level too low — it needs faction → attacks and faction → wars.';
+      default: return (raw && raw.error) || 'Unknown API error.';
     }
   }
-  
-  function sortTable(col) {
-    if (sortCol === col) {
-      sortAsc = !sortAsc;
-    } else {
-      sortCol = col;
-      sortAsc = false;
+
+  async function apiFetch(url) {
+    const res = await fetch(url);
+    let data = null;
+    try { data = await res.json(); } catch (e) { /* non-JSON body */ }
+    if (res.ok && data && !data.error) return data;
+    const code = data && data.error && data.error.code;
+    if (code === 5) {
+      setProgress('Rate limited — retrying in 5s…');
+      await sleep(5000);
+      return apiFetch(url);
     }
-    
-    rows.sort((a, b) => {
-      const aVal = getCellValue(a, sortCol);
-      const bVal = getCellValue(b, sortCol);
-      if (typeof aVal === 'string') {
-        return sortAsc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+    throw new Error(friendlyError(code, data && data.error));
+  }
+
+  function compactRow(a) {
+    return [
+      a.id,
+      a.started,
+      a.attacker && a.attacker.id,
+      a.attacker && a.attacker.name,
+      (a.defender && a.defender.faction && a.defender.faction.name) || '',
+      a.result,
+      a.respect_gain || 0,
+    ];
+  }
+
+  function pickWar(wars) {
+    if (wars.ranked && wars.ranked.war_id) return wars.ranked;
+    if (Array.isArray(wars.raids) && wars.raids.length) return wars.raids[wars.raids.length - 1];
+    return null;
+  }
+
+  async function detectWar() {
+    clearLiveError();
+    const key = els.keyInput.value.trim();
+    if (!key) { showLiveError('Enter your API key first.'); return; }
+    saveKey();
+    setBusy(els.detectBtn, true, 'Detecting…');
+    try {
+      const data = await apiFetch(TORN_API + '/faction/wars?key=' + encodeURIComponent(key));
+      const wars = (data && data.wars) || {};
+      const war = pickWar(wars);
+      if (!war) {
+        showWarInfo('No ranked war or raid detected — set the window manually below, or use a manual start time.');
+        els.warStartTs.value = '';
+        els.warEndTs.value = '';
+        els.warNameHidden.value = '';
+        return;
       }
-      return sortAsc ? aVal - bVal : bVal - aVal;
-    });
-    
-    rows.forEach((row, i) => {
-      row.querySelector('td').textContent = i + 1;
-      tbody.appendChild(row);
+      const factions = (war.factions || []).map((f) => f && f.name).filter(Boolean);
+      const label = (war.war_id ? 'Ranked war #' + war.war_id + ' · ' : '') + factions.join(' vs ');
+      els.warStartTs.value = war.start || '';
+      els.warEndTs.value = war.end || '';
+      els.warNameHidden.value = factions.join(' vs ');
+      const endText = war.end ? fmtTs(war.end) : 'ongoing';
+      showWarInfo('<strong>' + label + '</strong><br>Start: ' + fmtTs(war.start) + ' · End: ' + endText +
+        ' — <span style="opacity:.8">edit the fields below to override.</span>');
+    } catch (err) {
+      showLiveError(err.message);
+    } finally {
+      setBusy(els.detectBtn, false, 'Detect War');
+    }
+  }
+
+  function setProgress(text, pct) {
+    els.progressText.textContent = text;
+    if (pct !== undefined) els.progressBar.style.width = pct + '%';
+    els.progressWrap.classList.remove('d-none');
+  }
+
+  function hideProgress() {
+    els.progressWrap.classList.add('d-none');
+  }
+
+  async function runLiveFetch() {
+    clearLiveError();
+    const key = els.keyInput.value.trim();
+    if (!key) { showLiveError('Enter your API key first.'); return; }
+    saveKey();
+
+    const manualStart = dtLocalToUnix(els.manualStart.value);
+    const manualEnd = dtLocalToUnix(els.manualEnd.value);
+    const from = manualStart !== null ? manualStart : (els.warStartTs.value ? parseInt(els.warStartTs.value, 10) : null);
+    const to = manualEnd !== null ? manualEnd : (els.warEndTs.value ? parseInt(els.warEndTs.value, 10) : null);
+
+    if (!from) { showLiveError('Detect the war first, or set a manual war start time.'); return; }
+    if (to !== null && to <= from) { showLiveError('End time must be after the start time.'); return; }
+
+    els.warNameHidden.value = els.warNameHidden.value || '';
+    els.warOppHidden.value = els.warOppHidden.value || '';
+
+    setProgress('Fetching attacks…');
+    const attacks = new Map();
+    let url = TORN_API + '/faction/attacks?key=' + encodeURIComponent(key) +
+      '&limit=' + PAGE_SIZE + '&filters=outgoing&sort=asc&from=' + from +
+      (to !== null ? '&to=' + to : '');
+    let prevUrl = null;
+    let pages = 0;
+
+    try {
+      while (url) {
+        if (++pages > MAX_PAGES) {
+          throw new Error('Fetch window too large (over ' + MAX_PAGES + ' pages) — narrow the time range and try again.');
+        }
+        const data = await apiFetch(url);
+        for (const a of (data.attacks || [])) {
+          attacks.set(a.id, compactRow(a));
+        }
+        url = (data._metadata && data._metadata.links && data._metadata.links.next) || null;
+        if (url) url += '&key=' + encodeURIComponent(key); // next links omit the key
+        if (url === prevUrl) break;                        // cursor stall guard (inclusive boundaries)
+        prevUrl = url;
+        setProgress('Fetching attacks… page ' + pages + ' (' + attacks.size + ' attacks so far)', Math.min(100, pages * 4));
+        if (url) await sleep(PAGE_PACING_MS);
+      }
+
+      if (attacks.size === 0) {
+        if (from > Math.floor(Date.now() / 1000)) {
+          showLiveError("This war hasn't started yet — it starts at " + fmtTs(from) + '. No attacks exist until then.');
+        } else {
+          showLiveError('No attacks found in the selected window.');
+        }
+        return;
+      }
+
+      els.attacksHidden.value = JSON.stringify(Array.from(attacks.values()));
+      els.form.submit();
+    } catch (err) {
+      hideProgress();
+      showLiveError(err.message);
+    }
+  }
+
+  // --- Mode tabs ---
+  const fileInput = $('#csv_file');
+  function setMode(mode) {
+    els.modeInput.value = mode;
+    els.tabCsv.classList.toggle('active', mode !== 'live');
+    els.tabLive.classList.toggle('active', mode === 'live');
+    els.csvSection.classList.toggle('d-none', mode === 'live');
+    els.liveSection.classList.toggle('d-none', mode !== 'live');
+    els.submitBtn.innerHTML = mode === 'live' ? 'Fetch &amp; Process' : 'Process Data';
+    if (fileInput) fileInput.required = (mode !== 'live');
+  }
+
+  els.tabCsv.addEventListener('click', () => setMode('csv'));
+  els.tabLive.addEventListener('click', () => setMode('live'));
+  els.detectBtn.addEventListener('click', detectWar);
+  els.form.addEventListener('submit', (e) => {
+    if (els.modeInput.value === 'live') {
+      e.preventDefault();
+      runLiveFetch();
+    }
+  });
+  if (els.refreshBtn) els.refreshBtn.addEventListener('click', runLiveFetch);
+
+  // Prefill the stored key
+  try { els.keyInput.value = localStorage.getItem(KEY_STORE) || ''; } catch (e) { /* private mode */ }
+  // Sync file-input validation state with the current mode (live POSTs persist mode)
+  if (fileInput) fileInput.required = (els.modeInput.value !== 'live');
+
+  // --- Sortable results ---
+  const tbody = document.getElementById('results-body');
+  if (tbody) {
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+
+    // Column order: 0=#, 1=name, 2=24h, 3=48h, 4=atk, 5=ast, 6=loss, 7=respect, 8=tickets
+    const hasTickets = document.querySelector('th[data-sort="tickets"]') !== null;
+    const ticketIndex = hasTickets ? 8 : -1;
+
+    let sortCol = hasTickets ? 'tickets' : 'hits_48h';
+    let sortAsc = false;
+
+    function getCellValue(row, col) {
+      const cells = row.querySelectorAll('td');
+      switch (col) {
+        case 'name': return cells[1].textContent.toLowerCase();
+        case 'hits_24h': return parseInt(cells[2].textContent) || 0;
+        case 'hits_48h': return parseInt(cells[3].textContent) || 0;
+        case 'attacks': return parseInt(cells[4].textContent) || 0;
+        case 'assists': return parseInt(cells[5].textContent) || 0;
+        case 'losses': return parseInt(cells[6].textContent) || 0;
+        case 'respect': return parseFloat(cells[7].textContent) || 0;
+        case 'tickets': return ticketIndex > 0 ? (parseInt(cells[ticketIndex].textContent) || 0) : 0;
+        default: return 0;
+      }
+    }
+
+    function sortTable(col) {
+      if (sortCol === col) {
+        sortAsc = !sortAsc;
+      } else {
+        sortCol = col;
+        sortAsc = false;
+      }
+
+      rows.sort((a, b) => {
+        const aVal = getCellValue(a, sortCol);
+        const bVal = getCellValue(b, sortCol);
+        if (typeof aVal === 'string') {
+          return sortAsc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+        }
+        return sortAsc ? aVal - bVal : bVal - aVal;
+      });
+
+      rows.forEach((row, i) => {
+        row.querySelector('td').textContent = i + 1;
+        tbody.appendChild(row);
+      });
+    }
+
+    document.querySelectorAll('th[data-sort]').forEach((th) => {
+      th.addEventListener('click', () => sortTable(th.dataset.sort));
     });
   }
-  
-  document.querySelectorAll('th[data-sort]').forEach(th => {
-    th.addEventListener('click', () => sortTable(th.dataset.sort));
-  });
-});
+})();
 </script>
 
 </body>

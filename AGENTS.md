@@ -1,157 +1,58 @@
-# AGENTS.md - Development Guidelines for NPO Hit Limit Site
+# AGENTS.md - NPO Hit Limit Site
 
-## Project Overview
+## What this is
 
-This is a Django web application that processes YATA CSV exports to track faction hit limits and calculate ticket payouts for the Torn game. The project uses Django 4.2+, pandas, and SQLite.
+Single-view Django app for the Torn game: hit-limit + ticket-payout stats from either a YATA faction-attacks CSV or live via the Torn API. Core logic lives in `tracker/views.py`: `compute_stats()` (the shared stats seam), `normalize_attacks()` (live-row normalizer), and `index_view()` (request handling / CSV parsing).
 
-## Build / Test Commands
+There are **no models** (`tracker/models.py` is empty) and the DB is never touched at runtime — processing is 100% in-memory pandas. `migrate` is only needed for `/admin/` (auth/sessions).
 
-### Validate Configuration
+## Commands
+
 ```bash
-python manage.py check
+DEBUG=True python manage.py runserver   # local dev
+python manage.py check                  # validate config
+python manage.py test                   # first tests are in tracker/tests.py — extend them when changing seam logic
+python manage.py migrate                # creates db.sqlite3 (gitignored) for /admin/
 ```
 
-### Development Server
-```bash
-python manage.py runserver
-```
+## Gotchas
 
-### Run Tests
-```bash
-python manage.py test
-```
+- `settings.py` was generated with Django 6.0.3 (`requirements.txt` pins `>=4.2.0`, so pip installs the latest). Dockerfile uses Python 3.13.
+- `SECRET_KEY` is a hardcoded insecure dev key and is NOT read from an env var. Env vars are only: `DEBUG` (default `False`), `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`.
+- `db.sqlite3` is gitignored — a fresh clone has no DB until `migrate`.
+- Project-root `static/` is NOT wired up (no `STATICFILES_DIRS`, no whitenoise) and the template hardcodes `/static/star.png` as favicon. Don't rely on `{% static %}` or static serving.
+- Form field state is intentionally preserved across POSTs (`context.update` in views.py) — keep it.
+- CSV errors are caught by a generic `except Exception` and rendered in-template as `context['error']`, not returned as 500s.
 
-### Run a Single Test
-```bash
-python manage.py test tracker.tests.<TestClassName>.<test_method_name>
-# Example: python manage.py test tracker.tests.MyModelTestCase.test_something
-```
+## CSV processing rules (views.py)
 
-### Database Migrations
-```bash
-python manage.py makemigrations
-python manage.py migrate
-```
+- Reads with commas first, retries with `;`; must contain `timestamp_started` column or raises ValueError.
+- Filters to rows where `attacker_factionname` contains "NPO" (case-insensitive); optional exact-match `defender_faction` filter (applied inside `compute_stats`, shared with live mode).
+- "Valid" results: `Attacked`, `Hospitalized`, `Assist`, `Lost`.
+- 24h/48h windows measured from the earliest attack timestamp (war start), not "now". Over limit = hits strictly > limit.
+- Tickets (only when `show_tickets` checkbox on): `attacks*20 + assists*15 + losses*15` (no cap on losses).
+- Respect column: sum of `respect_gain` over the whole (defender-filtered) window, including non-valid results. CSV mode reads a `respect`/`respect_gain` column if present, else 0.
 
-### Django Shell
-```bash
-python manage.py shell
-```
+## Live mode (mode=live POST)
 
-### Docker Build
-```bash
-docker build -t npo-hit-limit-site .
-```
+- Browser fetches `/v2/faction/wars` + `/v2/faction/attacks` directly from `api.torn.com` (CORS is open). The API key never reaches Django — **only compact rows are POSTed**.
+- POST fields: `mode=live`, `attacks` (JSON array of compact rows), `war_start`/`war_end` (unix ts), `war_name`, plus the shared limits/defender/tickets fields and `manual_start`/`manual_end` (datetime-local values, round-tripped so the form keeps state).
+- Compact row contract (server: `normalize_attacks()`): `[id, started, attacker_id, attacker_name, defender_faction, result, respect_gain?]`. Malformed rows are dropped with a warning count; duplicate ids keep the first; missing defender faction becomes `''`.
+- Live mode is faction-agnostic: **no NPO filter** (`filters=outgoing` scopes to the key owner).
+- The client-side fetch has three Torn API quirks baked in (verified live, see SPEC.md): `next` links omit `key=` (must re-attach), page boundaries are **inclusive** (dedupe by id is mandatory), and the cursor can stall at the tail (`next` repeats) — the JS breaks when a `next` URL repeats itself, with a 90-page cap as a backstop.
 
-## Code Style Guidelines
+## index.html client-side sorting
 
-### General Principles
-- Follow Django conventions and PEP 8 style guide
-- Use 4 spaces for indentation (no tabs)
-- Maximum line length: 120 characters
-- Use type hints where beneficial
-- Add docstrings to complex functions
+The sort JS addresses table cells by hardcoded index. Column order is: `0=#`, `1=name`, `2=hits_24h`, `3=hits_48h`, `4=attacks`, `5=assists`, `6=losses`, `7=respect`, `8=tickets`. The `ticketIndex` detection (respect = 7, tickets = 8) is part of this coupling — adding/removing a results column requires updating all of them together.
 
-### Naming Conventions
-- **Classes**: PascalCase (e.g., `AttackReport`)
-- **Functions/Variables**: snake_case (e.g., `csv_file`, `process_csv`)
-- **Views**: snake_case, descriptive (e.g., `index_view`)
-- **URLs**: lowercase with hyphens (e.g., `/hit-tracker/`)
+## Form state / mode persistence
 
-### Imports (sorted alphabetically within groups)
-```python
-import os
-from datetime import datetime
+- `context.update` in views.py preserves limits/defender/tickets/mode across POSTs — keep it.
+- **Live is the default tab** (`context['mode'] = 'live'` on GET); CSV is opt-in. The tabs, submit label, and the file input's `required` toggle are all driven by `{{ mode }}`.
+- Live state round-trips through hidden inputs (`war_start_ts`/`war_end_ts`/`war_name` + manual datetimes) so **Refresh Live** can re-run the fetch with the same window; `{{ mode }}` drives which tab is active after a POST.
+- The file input's `required` attribute is toggled by JS (`setMode`) — a live POST must not trip HTML5 file validation.
 
-import pandas as pd
-from django.conf import settings
-from django.db import models
+## Docker / deploy
 
-from tracker.models import Attack
-```
-
-### Error Handling
-- Use try/except blocks for operations that may fail
-- Catch specific exceptions rather than bare except
-- Provide meaningful error messages to users
-
-### Database
-- Use Django ORM for all database operations
-- Create migrations for any model changes: `makemigrations`
-- Keep migrations small and focused
-- Use appropriate field types (CharField, IntegerField, DateTimeField, etc.)
-
-### Security
-- Never commit secrets to version control
-- Use environment variables for sensitive configuration
-- Always use CSRF tokens in forms (`{% csrf_token %}`)
-- Validate all user input
-- Sanitize file uploads before processing
-
-### Git Conventions
-- Write concise, descriptive commit messages
-- Reference issues in commit messages when applicable
-- Create feature branches for new features
-- Use meaningful branch names (e.g., `feature/add-export-csv`)
-
-## Project Structure
-
-```
-npo-hit-limit-site/
-├── milcom_project/       # Django project settings
-│   ├── settings.py       # Main configuration
-│   ├── urls.py           # URL routing
-│   └── wsgi.py           # WSGI entry point
-├── tracker/              # Main application
-│   ├── models.py         # Database models
-│   ├── views.py          # View functions
-│   ├── urls.py           # App URL patterns
-│   ├── admin.py          # Admin configuration
-│   ├── apps.py           # App configuration
-│   ├── tests.py          # Unit tests
-│   └── templates/tracker/
-│       └── index.html    # Main template
-├── static/               # Static files
-├── db.sqlite3            # SQLite database
-├── manage.py             # Django CLI
-├── requirements.txt      # Python dependencies
-└── Dockerfile            # Docker configuration
-```
-
-## Configuration
-
-### Environment Variables
-- `DJANGO_SETTINGS_MODULE`: Set to `milcom_project.settings`
-- `SECRET_KEY`: Django secret key (keep private)
-- `DEBUG`: Set to `True` for development, `False` for production
-- `ALLOWED_HOSTS`: Comma-separated list of allowed hosts
-
-Production settings are in `milcom_project/settings.py`. Adjust DEBUG and ALLOWED_HOSTS for production.
-
-## Testing Guidelines
-
-- Write tests for all new features
-- Test both success and error paths
-- Use Django's test client for view testing
-- Use `@override_settings` for test-specific configuration
-
-## Common Tasks
-
-### Adding a New View
-1. Add view function in `tracker/views.py`
-2. Add URL pattern in `tracker/urls.py`
-3. Create template in `tracker/templates/tracker/`
-4. Add tests in `tracker/tests.py`
-
-### Processing CSV Data
-The application uses pandas to read YATA CSV exports. Handle both comma and semicolon delimiters:
-
-```python
-df = pd.read_csv(csv_file)
-if 'timestamp_started' not in df.columns:
-    csv_file.seek(0)
-    df = pd.read_csv(csv_file, sep=';')
-```
-
-### Deployment
-GitHub Actions builds and pushes Docker image to GHCR on push to main.
+- Dockerfile: `python:3.13-slim`, gunicorn on `:8000` (3 workers), non-root `appuser`, **no migrate/collectstatic step** — the app works without a DB.
+- `.github/workflows/docker-build.yml` builds and pushes `ghcr.io/nickstrijbos/npo-hit-limit-site:latest` on push to `main`.
