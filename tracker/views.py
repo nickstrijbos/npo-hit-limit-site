@@ -7,15 +7,11 @@ import pandas as pd
 VALID_RESULTS = ('Attacked', 'Hospitalized', 'Assist', 'Lost')
 
 
-def compute_stats(df, limit_24h, limit_48h, defender_faction, show_tickets, attacker_label=''):
+def compute_stats(df, limit_24h, limit_48h, defender_faction, show_tickets):
     """Pure per-member stats over a normalized attacks DataFrame.
 
-    Shared seam for both CSV and live modes. Input DataFrame must have
-    timestamp_started, attacker_id, attacker_name, defender_faction, result
-    and (optionally) respect_gain/'respect' columns.
-
-    attacker_label: 'NPO ' for the CSV path so its original error wording
-    ("No NPO attacks found...") is preserved; '' for live mode.
+    Input DataFrame must have timestamp_started, attacker_id, attacker_name,
+    defender_faction, result and (optionally) respect_gain/'respect' columns.
     """
     if 'respect_gain' not in df.columns:
         if 'respect' in df.columns:
@@ -28,7 +24,7 @@ def compute_stats(df, limit_24h, limit_48h, defender_faction, show_tickets, atta
         df = df[df['defender_faction'].astype(str) == defender_faction]
 
     if df.empty:
-        raise ValueError(f"No {attacker_label}attacks found against '{defender_faction}'.")
+        raise ValueError(f"No attacks found against '{defender_faction}'.")
 
     df = df.sort_values(by='timestamp_started')
     war_start_time = df['timestamp_started'].min()
@@ -139,11 +135,10 @@ def _fmt_ts(ts):
 
 def index_view(request):
     context = {
-        'limit_24h': 15,
-        'limit_48h': 25,
+        'limit_24h': 10,
+        'limit_48h': 15,
         'defender_faction': '',
         'show_tickets': False,
-        'mode': 'live',
         'results': None,
         'error': None,
         'meta': None,
@@ -156,8 +151,6 @@ def index_view(request):
     }
 
     if request.method == 'POST':
-        mode = 'live' if request.POST.get('mode') == 'live' else 'csv'
-
         # KEEP STATE: Grab the values so we can pass them right back to the form
         limit_24h = int(request.POST.get('limit_24h', 15))
         limit_48h = int(request.POST.get('limit_48h', 25))
@@ -166,7 +159,6 @@ def index_view(request):
 
         # Update context immediately so the form doesn't clear if there's an error
         context.update({
-            'mode': mode,
             'limit_24h': limit_24h,
             'limit_48h': limit_48h,
             'defender_faction': defender_faction,
@@ -174,55 +166,32 @@ def index_view(request):
         })
 
         try:
-            if mode == 'live':
-                # Live state round-trip (hidden inputs stay populated for Refresh)
-                context.update({
-                    'war_start_ts': request.POST.get('war_start', ''),
-                    'war_end_ts': request.POST.get('war_end', ''),
-                    'war_name': request.POST.get('war_name', ''),
-                    'war_opponent': request.POST.get('war_opponent', ''),
-                    'manual_start': request.POST.get('manual_start', ''),
-                    'manual_end': request.POST.get('manual_end', ''),
-                })
+            # Live state round-trip (hidden inputs stay populated for Refresh)
+            context.update({
+                'war_start_ts': request.POST.get('war_start', ''),
+                'war_end_ts': request.POST.get('war_end', ''),
+                'war_name': request.POST.get('war_name', ''),
+                'war_opponent': request.POST.get('war_opponent', ''),
+                'manual_start': request.POST.get('manual_start', ''),
+                'manual_end': request.POST.get('manual_end', ''),
+            })
 
-                try:
-                    rows = json.loads(request.POST.get('attacks', '[]'))
-                except (TypeError, ValueError):
-                    raise ValueError("Invalid live attack payload — try refreshing the page and re-running.")
+            try:
+                rows = json.loads(request.POST.get('attacks', '[]'))
+            except (TypeError, ValueError):
+                raise ValueError("Invalid live attack payload — try refreshing the page and re-running.")
 
-                df, warnings = normalize_attacks(rows)
-                results = compute_stats(df, limit_24h, limit_48h, defender_faction, show_tickets)
+            df, warnings = normalize_attacks(rows)
+            results = compute_stats(df, limit_24h, limit_48h, defender_faction, show_tickets)
 
-                context['results'] = results
-                context['meta'] = {
-                    'fetched': len(df) + warnings,
-                    'warnings': warnings,
-                    'window_start': _fmt_ts(request.POST.get('war_start', '')) or _fmt_ts(df['timestamp_started'].min()),
-                    'window_end': _fmt_ts(request.POST.get('war_end', '')) or 'now',
-                    'war': context['war_name'],
-                }
-
-            else:
-                csv_file = request.FILES.get('csv_file')
-
-                if csv_file:
-                    # 1. Try reading with standard commas
-                    df = pd.read_csv(csv_file)
-
-                    # 2. Try semicolons if needed
-                    if 'timestamp_started' not in df.columns:
-                        csv_file.seek(0)
-                        df = pd.read_csv(csv_file, sep=';')
-
-                    if 'timestamp_started' not in df.columns:
-                        raise ValueError("Could not find 'timestamp_started' column. Invalid YATA export.")
-
-                    # Force Attacker to be NPO
-                    df = df[df['attacker_factionname'].astype(str).str.contains('NPO', case=False, na=False)]
-
-                    context['results'] = compute_stats(
-                        df, limit_24h, limit_48h, defender_faction, show_tickets, attacker_label='NPO '
-                    )
+            context['results'] = results
+            context['meta'] = {
+                'fetched': len(df) + warnings,
+                'warnings': warnings,
+                'window_start': _fmt_ts(request.POST.get('war_start', '')) or _fmt_ts(df['timestamp_started'].min()),
+                'window_end': _fmt_ts(request.POST.get('war_end', '')) or 'now',
+                'war': context['war_name'],
+            }
 
         except Exception as e:
             context['error'] = f"Error: {str(e)}"

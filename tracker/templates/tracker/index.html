@@ -40,9 +40,6 @@
       .btn-npo-primary:hover{background: rgba(42,122,191,.35); color: #fff; transform:translateY(-1px);}
       .btn-npo-primary:disabled{opacity:.5; pointer-events:none;}
       
-      .tab-btn{flex:1; opacity:.45; border-radius:10px !important; margin:0 3px;}
-      .tab-btn.active{opacity:1; background: rgba(42,122,191,.35); color:#fff;}
-      
       .form-label{font-weight:600; color:var(--npo-sub);}
       .form-control{background:#0a0f14; color:var(--npo-text); border:1px solid #253041}
       .form-control:focus{background:#0b1118; color:var(--npo-text); border-color:#2a7abf; box-shadow:0 0 0 .2rem rgba(42,122,191,.25)}
@@ -71,13 +68,12 @@
 <main class="shell">
   <div class="hero">
     <h2>Hit Limit Tracker</h2>
-    <p class="sub mt-2 mb-3">Audit faction hit limits and ticket payouts from YATA CSV exports or live from the Torn API.</p>
+    <p class="sub mt-2 mb-3">Audit faction hit limits and ticket payouts live from the Torn API.</p>
   </div>
 
   <div class="card-npo mb-4">
-    <form id="tracker-form" action="" method="POST" enctype="multipart/form-data">
+    <form id="tracker-form" action="" method="POST">
         {% csrf_token %}
-        <input type="hidden" name="mode" id="mode-input" value="{{ mode }}">
         
         {% if error %}
         <div class="alert alert-danger" style="background: rgba(255,90,90,.1); border-color: #ff5a5a; color: #ff5a5a; font-weight: 600;">
@@ -85,33 +81,7 @@
         </div>
         {% endif %}
 
-        <div class="btn-group d-flex mb-4" role="group">
-            <button type="button" id="tab-live" class="btn-npo-primary tab-btn {% if mode == 'live' %}active{% endif %}">Live API</button>
-            <button type="button" id="tab-csv" class="btn-npo-primary tab-btn {% if mode != 'live' %}active{% endif %}">CSV Upload</button>
-        </div>
-
-        <div id="csv-section" {% if mode == 'live' %}class="d-none"{% endif %}>
-            <div class="row g-3 mb-3">
-                <div class="col-md-6">
-                    <label for="csv_file" class="form-label">Upload Attacks CSV</label>
-                    <input type="file" class="form-control" name="csv_file" id="csv_file" accept=".csv" required>
-                </div>
-            </div>
-            <div class="alert mb-0" style="background: rgba(42,122,191,.1); border: 1px solid rgba(42,122,191,.4); color: var(--npo-text); border-radius: 12px; font-size: 0.95em;">
-                <h5 style="color: #8fc1f1; font-weight: 700; font-size: 1.05em; margin-bottom: 12px;">
-                    <span style="margin-right: 6px;">ℹ️</span> How to generate the correct CSV
-                </h5>
-                <ol style="margin-bottom: 0; padding-left: 24px; color: var(--npo-sub);">
-                    <li class="mb-1">Go to <a href="https://yata.yt/faction/attacks/" target="_blank" style="color: var(--npo-accent); text-decoration: none;">YATA Faction Attacks</a> and click <strong>Create new attacks reports</strong>.</li>
-                    <li class="mb-1">Select the exact <strong>Start Time</strong> of the war.</li>
-                    <li class="mb-1">Press the <span class="badge" style="background: #e74c3c; color: white;">Live</span> button <em>(Note: YATA cannot create reports longer than 7 days)</em>.</li>
-                    <li class="mb-1">Once generated, click the <strong>Eye Icon</strong> to view the report.</li>
-                    <li>In the top right corner, click <strong>Export > Attacks</strong>. Upload that downloaded CSV here!</li>
-                </ol>
-            </div>
-        </div>
-
-        <div id="live-section" {% if mode != 'live' %}class="d-none"{% endif %}>
+        <div id="live-section">
             <div class="row g-3 mb-3">
                 <div class="col-md-7">
                     <label for="api-key" class="form-label">Torn API Key <small style="opacity:0.7">(Limited access)</small></label>
@@ -174,7 +144,7 @@
                     Show Tickets
                     </label>
                 </div>
-                <button type="submit" id="submit-btn" class="btn-npo-primary w-100">{% if mode == 'live' %}Fetch &amp; Process{% else %}Process Data{% endif %}</button>
+                <button type="submit" id="submit-btn" class="btn-npo-primary w-100">Fetch &amp; Process</button>
             </div>
         </div>
         </form>
@@ -183,9 +153,7 @@
   {% if results %}
   <div class="mb-3 d-flex gap-2">
     <a href="/" class="btn-npo-primary" style="text-decoration: none;">↺ Start Over</a>
-    {% if mode == 'live' %}
     <button type="button" id="refresh-live" class="btn-npo-primary">↺ Refresh Live</button>
-    {% endif %}
   </div>
   <div class="card-npo" style="padding: 0; overflow: hidden;">
     {% if meta %}
@@ -278,12 +246,6 @@
 
   const els = {
     form: $('#tracker-form'),
-    modeInput: $('#mode-input'),
-    tabCsv: $('#tab-csv'),
-    tabLive: $('#tab-live'),
-    csvSection: $('#csv-section'),
-    liveSection: $('#live-section'),
-    submitBtn: $('#submit-btn'),
     keyInput: $('#api-key'),
     detectBtn: $('#detect-war'),
     warInfo: $('#war-info'),
@@ -294,6 +256,7 @@
     warEndTs: $('#war-end-ts'),
     warNameHidden: $('#war-name-hidden'),
     warOppHidden: $('#war-opp-hidden'),
+    defenderFaction: $('#defender_faction'),
     attacksHidden: $('#attacks-hidden'),
     progressWrap: $('#fetch-progress-wrap'),
     progressBar: $('#fetch-progress-bar'),
@@ -370,7 +333,7 @@
       a.started,
       a.attacker && a.attacker.id,
       a.attacker && a.attacker.name,
-      (a.defender && a.defender.faction && a.defender.faction.name) || '',
+      (a.defender && a.defender.faction && a.defender.faction.id) || '',
       a.result,
       a.respect_gain || 0,
     ];
@@ -407,6 +370,16 @@
       const endText = war.end ? fmtTs(war.end) : 'ongoing';
       showWarInfo('<strong>' + label + '</strong><br>Start: ' + fmtTs(war.start) + ' · End: ' + endText +
         ' — <span style="opacity:.8">edit the fields below to override.</span>');
+
+      // Auto-fill the defender faction ID with the war opponent (never fails the detect)
+      try {
+        const me = await apiFetch(TORN_API + '/faction?key=' + encodeURIComponent(key));
+        const myId = me && me.faction && me.faction.id;
+        if (myId && Array.isArray(war.factions)) {
+          const opponent = war.factions.find((f) => f && f.id && String(f.id) !== String(myId));
+          if (opponent && opponent.id) els.defenderFaction.value = opponent.id;
+        }
+      } catch (e) { /* defender field stays as-is */ }
     } catch (err) {
       showLiveError(err.message);
     } finally {
@@ -483,33 +456,15 @@
     }
   }
 
-  // --- Mode tabs ---
-  const fileInput = $('#csv_file');
-  function setMode(mode) {
-    els.modeInput.value = mode;
-    els.tabCsv.classList.toggle('active', mode !== 'live');
-    els.tabLive.classList.toggle('active', mode === 'live');
-    els.csvSection.classList.toggle('d-none', mode === 'live');
-    els.liveSection.classList.toggle('d-none', mode !== 'live');
-    els.submitBtn.innerHTML = mode === 'live' ? 'Fetch &amp; Process' : 'Process Data';
-    if (fileInput) fileInput.required = (mode !== 'live');
-  }
-
-  els.tabCsv.addEventListener('click', () => setMode('csv'));
-  els.tabLive.addEventListener('click', () => setMode('live'));
   els.detectBtn.addEventListener('click', detectWar);
   els.form.addEventListener('submit', (e) => {
-    if (els.modeInput.value === 'live') {
-      e.preventDefault();
-      runLiveFetch();
-    }
+    e.preventDefault();
+    runLiveFetch();
   });
   if (els.refreshBtn) els.refreshBtn.addEventListener('click', runLiveFetch);
 
   // Prefill the stored key
   try { els.keyInput.value = localStorage.getItem(KEY_STORE) || ''; } catch (e) { /* private mode */ }
-  // Sync file-input validation state with the current mode (live POSTs persist mode)
-  if (fileInput) fileInput.required = (els.modeInput.value !== 'live');
 
   // --- Sortable results ---
   const tbody = document.getElementById('results-body');

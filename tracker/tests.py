@@ -118,13 +118,6 @@ class ComputeStatsTests(SimpleTestCase):
         df = make_df([])
         with self.assertRaises(ValueError):
             compute_stats(df, 15, 25, '', False)
-
-    def test_caller_label_kept_in_error(self):
-        # CSV path keeps its original wording
-        df = make_df([])
-        with self.assertRaises(ValueError) as ctx:
-            compute_stats(df, 15, 25, '', False, attacker_label='NPO ')
-        self.assertIn('No NPO attacks found', str(ctx.exception))
         with self.assertRaises(ValueError) as ctx:
             compute_stats(df, 15, 25, '', False)
         self.assertIn('No attacks found', str(ctx.exception))

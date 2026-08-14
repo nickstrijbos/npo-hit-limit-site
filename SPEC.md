@@ -8,19 +8,20 @@ Separately, the site is used by multiple factions, each with its own staff and i
 
 ## Solution
 
-Add a **Live mode** to the existing tracker page. A faction staff member pastes their own Torn API key (a Limited-access key is sufficient). The key stays in the user's browser (`localStorage`) and is never sent to, or stored by, the Django server — the Torn API allows browser calls directly (CORS is wide open).
+A faction staff member pastes their own Torn API key (a Limited-access key is sufficient). The key stays in the user's browser (`localStorage`) and is never sent to, or stored by, the Django server — the Torn API allows browser calls directly (CORS is wide open).
 
-In Live mode the browser:
+The browser:
 
 1. Calls `/v2/faction/wars` to auto-detect the current or upcoming ranked war and its declared start/end times (with a manual datetime fallback).
-2. Pulls all faction attacks from war start to now via `/v2/faction/attacks` (`filters=outgoing`, forward pagination via `_metadata.links.next`).
-3. Posts compact attack rows to the existing page as a normal form submit.
+2. Calls `/v2/faction` to learn the key owner's faction ID, then auto-fills the Defender Faction ID field with the war opponent's ID.
+3. Pulls all faction attacks from war start to now via `/v2/faction/attacks` (`filters=outgoing`, forward pagination via `_metadata.links.next`).
+4. Posts compact attack rows to the page as a normal form submit.
 
-Django normalizes those rows into the same pandas pipeline the CSV path already uses, producing identical hit-limit, ticket (2/3 rule), and respect results. CSV mode stays available for full coverage (merc/guest hits that the API misses) — the two modes share one statistics code path.
+Django normalizes those rows into a pandas pipeline producing hit-limit, ticket (2/3 rule), and respect results. **CSV mode has been removed** — live is the only mode.
 
 ## User Stories
 
-1. As a faction staff member, I want to select a "Live API" mode on the tracker page, so that I can get stats during a war without exporting a CSV.
+1. As a faction staff member, I want to get stats during a war without exporting a CSV.
 2. As a faction staff member, I want to paste my Torn API key once and have it remembered in my browser, so that I don't retype it on every refresh.
 3. As a faction staff member, I want my API key to never leave my browser, so that I stay comfortable sharing it (no server storage, no key in server logs).
 4. As a faction staff member, I want the page to automatically detect the current ranked war from my key, so that I don't have to look up the war start time.
@@ -35,7 +36,7 @@ Django normalizes those rows into the same pandas pipeline the CSV path already 
 13. As a faction staff member, I want the 2/3-rule ticket payout calculation (attacks × 20 + assists × 15 + paid losses × 15), so that I can pay members accurately.
 14. As a faction staff member, I want unpaid losses rendered in red with a hover tooltip, so that I can see where the 2/3 rule reduced payout.
 15. As a faction staff member, I want a per-member total respect-gain column, so that I can see who is contributing most during the war.
-16. As a faction staff member, I want the existing CSV upload mode to keep working unchanged, so that I can cover hits the API misses (merc/guest hits).
+16. As a faction staff member, I want Detect War to fill in the defender faction ID automatically, so that the results only count hits on the war opponent.
 17. As a faction staff member from any faction, I want the live mode to work with my own faction's key, so that the tool isn't NPO-specific.
 18. As a faction staff member, I want to filter by defender faction ID, so that I can exclude hits on non-war targets.
 19. As a faction staff member, I want the form fields (limits, defender filter, tickets toggle) to persist after processing, so that I can tweak and re-run easily.
@@ -54,6 +55,7 @@ Verified live against the Torn API (CORS: `access-control-allow-origin: *`, `acc
 
 - **Wars**: `GET /v2/faction/wars?key=...` → `{pacts: [], wars: {ranked: {war_id, start, end, target, winner, factions: [{id, name, ...}, ...]}, raids: [...], territory: [...]}}`. `ranked` is a single object (current or upcoming war; `end` is `null` while upcoming/active); `raids`/`territory` are arrays. Example from live data: upcoming ranked war vs "Helvete X", `start` 1786629600, `end: null`.
 - **Attacks**: `GET /v2/faction/attacks?key=...&limit=100&filters=outgoing&sort=asc&from=<war_start>&to=<war_end|omitted>` → `attacks[]` + `_metadata.links.next`. Forward pagination: follow `links.next` until `null` (verified end-to-end: 3 pages, 247 attacks, correct boundaries). `to` bounds the far end and is preserved in `next` links. Boundaries are non-inclusive — no duplicate attacks across pages.
+- **Faction**: `GET /v2/faction?key=...` → `{faction: {id, ...}}`. Used by Detect War to learn the key owner's faction ID so the Defender Faction ID field can be auto-filled with the war opponent's ID. A failure here never fails detection — the field just stays as-is.
 - **Retention**: the attacks log reaches back ~1 year (verified: oldest attack ~360 days old). `from=0` is buggy (`next: null`) — irrelevant, we always send a real war-start timestamp.
 - **Rate limits**: 100 requests/min per key owner; the 30s service cache dedupes identical requests (repeated refreshes with a fixed window hit cache and don't consume quota).
 - **Key access**: Limited-access keys cover both `faction/wars` and `faction/attacks` — the minimum a staff member needs to bring.
@@ -67,22 +69,22 @@ War start = `wars.ranked.start` (official declared start — matches the existin
 The browser trims each attack to a fixed-width row before posting, keeping the POST well under Django's default 2.5MB body cap even for ~9k attacks:
 
 ```
-[id, started, attacker_id, attacker_name, defender_faction, result]
+[id, started, attacker_id, attacker_name, defender_faction, result, respect_gain?]
 ```
 
-`defender_faction` = defender's faction name (or empty), `result` = Torn result string. Dedupe by `id` client-side. Django validates types and drops malformed rows with a warning count.
+`defender_faction` = defender's **faction ID** (or empty; matches the Defender Faction ID form field, which Detect War auto-fills with the war opponent's ID), `result` = Torn result string. Dedupe by `id` client-side. Django validates types and drops malformed rows with a warning count.
 
 ### Single processing seam
 
-Extract the stats computation (currently inline in the CSV path) into one pure function that both modes call: `compute_stats(df, limit_24h, limit_48h, defender_faction, show_tickets)`. CSV mode normalizes the file into the DataFrame (unchanged behavior); live mode normalizes the compact rows into the same DataFrame. This is the **single seam** at which the feature is tested — every other moving part (CSV parsing, browser fetch) is thin and unchanged.
+All stats computation lives in one pure function: `compute_stats(df, limit_24h, limit_48h, defender_faction, show_tickets)`. Live mode normalizes the compact rows into the DataFrame via `normalize_attacks()`. This is the **single seam** at which the feature is tested — every other moving part (row normalization, browser fetch) is thin and unchanged.
 
 ### Live mode is faction-agnostic
 
-No hardcoded "NPO" attacker filter in live mode — `filters=outgoing` already scopes results to the key owner's faction, so any faction's staff can use the tool. The defender-faction exact-match filter applies in both modes. CSV mode keeps its existing NPO filter.
+No hardcoded "NPO" attacker filter — `filters=outgoing` already scopes results to the key owner's faction, so any faction's staff can use the tool. The defender-faction-ID exact-match filter applies to all rows.
 
 ### Respect column
 
-New per-member `respect` total = sum of `respect_gain` over the fetched window (only meaningful for live mode; CSV mode reads a `respect`/`respect_gain` column if the export has one, else 0). Windowed 24h/48h respect is deferred.
+Per-member `respect` total = sum of `respect_gain` over the fetched window. Windowed 24h/48h respect is deferred.
 
 ### Client-side fetch behavior
 
@@ -107,9 +109,8 @@ The fetch is client-side; `requests` is not needed. No DB/models changes (proces
 - Auto-refresh timer / polling while the page is open (a manual Refresh button is included; live-polling can be a follow-up).
 - Windowed (24h/48h) respect columns.
 - Server-side key storage or a shared multi-faction dashboard (deliberately avoided; keys stay browser-side).
-- Coverage of merc/guest or external hits — an inherent Torn API limitation, mitigated by keeping CSV mode.
+- Coverage of merc/guest or external hits — an inherent Torn API limitation (the reason CSV mode was dropped: it didn't change this, and live is the workflow that matters).
 - Push notifications / Discord integration.
-- Anything in the CSV flow beyond the stats extraction (it must behave exactly as before).
 
 ## Further Notes
 
@@ -117,4 +118,3 @@ The fetch is client-side; `requests` is not needed. No DB/models changes (proces
 - Torn ToS note for the UI: key is stored in the user's browser only, not shared, temporary data, Limited access — the site should state this inline next to the key input.
 - Key access instructions for staff: generate a key with `faction → attacks` and `faction → wars` selections (Limited access level).
 - `localStorage` note: keys persist per browser; add a way to clear/replace the stored key (the input is prefillable and editable).
-- Docs (README + AGENTS.md) must be updated: live-mode usage, key requirements, the compact-row POST contract, and the sort-index coupling.
