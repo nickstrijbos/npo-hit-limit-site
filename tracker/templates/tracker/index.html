@@ -3,10 +3,11 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>MilCom Tools — Tracker</title>
+    <title>NPO War Room</title>
     <link rel="icon" href="/static/star.png" type="image/png">
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     
     <style>
       :root{
@@ -27,7 +28,7 @@
       .brand{display:flex; gap:10px; color:var(--npo-text); text-decoration:none; font-weight:700;}
       .brand .star{color:var(--npo-accent)}
       
-      .shell{max-width:900px; margin:28px auto; padding:0 20px;}
+      .shell{max-width:1100px; margin:28px auto; padding:0 20px; padding-bottom: 80px;}
       .hero{ border:1px solid var(--npo-border); border-radius:16px; padding:28px; margin-bottom: 24px;
              background: radial-gradient(600px 320px at 78% -10%, rgba(42,122,191,.20), transparent 60%),
                          linear-gradient(180deg, rgba(18,24,32,.85), rgba(12,18,26,.85)); }
@@ -44,6 +45,12 @@
       .form-control{background:#0a0f14; color:var(--npo-text); border:1px solid #253041}
       .form-control:focus{background:#0b1118; color:var(--npo-text); border-color:#2a7abf; box-shadow:0 0 0 .2rem rgba(42,122,191,.25)}
       
+      .nav-tabs{border-bottom:1px solid var(--npo-border);}
+      .nav-tabs .nav-link{color:var(--npo-sub); border:1px solid transparent; border-radius:10px 10px 0 0; padding:10px 22px; font-weight:600;}
+      .nav-tabs .nav-link:hover{border-color:var(--npo-border); color:var(--npo-text);}
+      .nav-tabs .nav-link.active{background:rgba(18,24,32,.85); border-color:var(--npo-border); border-bottom-color:transparent; color:var(--npo-accent);}
+      .tab-pane{padding-top:20px;}
+      
       .table{color: var(--npo-text); border-color: var(--npo-border); margin-bottom: 0;}
       .table th { background: rgba(26,34,44,.6); color: var(--npo-sub); border-bottom: 2px solid var(--npo-border); padding: 8px 10px; }
       .table td { background: transparent; padding: 8px 10px; border-bottom: 1px solid rgba(26,34,44,.4); vertical-align: middle; }
@@ -51,7 +58,25 @@
       .cell-over { color: #ff5a5a !important; font-weight: 700; background: rgba(255,90,90,.08) !important; border-radius: 4px; }
       .cell-safe { color: #60e6c2; }
       
-      .meta-bar{font-size:.9em; color:var(--npo-sub); border-bottom:1px solid rgba(26,34,44,.6); padding:12px 20px;}
+      .result-attacked,.result-hospitalized{color:#60e6c2;}
+      .result-assist{color:#8fc1f1;}
+      .result-lost{color:#ff5a5a;}
+      .row-dogpile td{background: rgba(255,217,74,.08) !important;}
+      .badge-dogpile{background: rgba(255,217,74,.15); border:1px solid rgba(255,217,74,.5); color: var(--npo-accent); border-radius:8px; padding:2px 8px; font-size:.75em; font-weight:700;}
+      
+      .meta-bar{font-size:.9em; color:var(--npo-sub); border-bottom:1px solid rgba(26,34,44,.6); padding:12px 20px; display:flex; flex-wrap:wrap; gap:14px; align-items:center;}
+      .meta-bar .tool-actions{margin-left:auto; display:flex; gap:8px; align-items:center;}
+      
+      .hm-table th{white-space:nowrap; font-size:.68em; padding:4px 2px;}
+      .hm-table td{padding:2px; border-bottom:1px solid rgba(26,34,44,.3);}
+      .hm-cell{color:var(--npo-text); font-size:.72em; text-align:center; border:1px solid rgba(26,34,44,.4); border-radius:3px; min-width:22px;}
+      .hm-empty{background:transparent !important;}
+      .hm-total{color:var(--npo-accent); font-weight:700; text-align:center;}
+      
+      .filter-row{display:flex; flex-wrap:wrap; gap:14px; align-items:end; margin-bottom:14px;}
+      .filter-row .form-label{font-size:.85em; margin-bottom:4px;}
+      .filter-row .form-control,.filter-row .form-select{width:auto;}
+      .filter-row .form-check{margin-bottom:8px;}
       
       footer{ position: fixed; bottom: 0; left: 0; width: 100%; color: var(--npo-sub); background: rgba(9,13,18,.65); border-top: 1px solid rgba(26,34,44,.6); z-index: 20; }
       .foot-grid{ max-width: 1100px; margin: 0 auto; padding: 8px 20px; display: flex; align-items: center; justify-content: space-between; min-height: var(--footer-h); font-size: .8em; }
@@ -67,8 +92,8 @@
 
 <main class="shell">
   <div class="hero">
-    <h2>Hit Limit Tracker</h2>
-    <p class="sub mt-2 mb-3">Audit faction hit limits and ticket payouts live from the Torn API.</p>
+    <h2>NPO War Room</h2>
+    <p class="sub mt-2 mb-3">Hit limits, chain log and enemy push analytics live from the Torn API.</p>
   </div>
 
   <div class="card-npo mb-4">
@@ -91,8 +116,9 @@
                         Generate one at torn.com with limited access.
                     </small>
                 </div>
-                <div class="col-md-5 d-flex align-items-end">
+                <div class="col-md-5 d-flex flex-column gap-2">
                     <button type="button" id="detect-war" class="btn-npo-primary w-100">Detect War</button>
+                    <button type="submit" id="submit-btn" class="btn-npo-primary w-100">Fetch &amp; Process</button>
                 </div>
             </div>
 
@@ -121,114 +147,363 @@
             <input type="hidden" name="war_end" id="war-end-ts" value="{{ war_end_ts }}">
             <input type="hidden" name="war_name" id="war-name-hidden" value="{{ war_name }}">
             <input type="hidden" name="war_opponent" id="war-opp-hidden" value="{{ war_opponent }}">
+            <input type="hidden" name="faction_names" id="faction-names-hidden" value="">
+            <input type="hidden" name="restored" id="restored-hidden" value="0">
             <input type="hidden" name="attacks" id="attacks-hidden">
         </div>
 
-        <div class="row g-3 align-items-end mt-1">
-            <div class="col-md-3">
-                <label for="defender_faction" class="form-label">Defender Faction ID<small style="opacity:0.7">(Optional)</small></label>
-                <input type="text" class="form-control" name="defender_faction" id="defender_faction" value="{{ defender_faction }}" placeholder="e.g. 10123">
-            </div>
-            <div class="col-md-3">
-                <label for="limit_24h" class="form-label">Limit: 0-24H</label>
-                <input type="number" class="form-control" name="limit_24h" id="limit_24h" value="{{ limit_24h }}" required>
-            </div>
-            <div class="col-md-3">
-                <label for="limit_48h" class="form-label">Limit: 0-48H</label>
-                <input type="number" class="form-control" name="limit_48h" id="limit_48h" value="{{ limit_48h }}" required>
-            </div>
-            <div class="col-md-3">
-                <div class="form-check mb-1">
-                    <input class="form-check-input" type="checkbox" name="show_tickets" id="show_tickets" {% if show_tickets %}checked{% endif %}>
-                    <label class="form-check-label" for="show_tickets">
-                    Show Tickets
-                    </label>
+        <ul class="nav nav-tabs mt-2" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="tab-hitlimits" data-bs-toggle="tab" data-bs-target="#pane-hitlimits" type="button" role="tab">Hit Limits</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-chain" data-bs-toggle="tab" data-bs-target="#pane-chain" type="button" role="tab">Chain</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-defenders" data-bs-toggle="tab" data-bs-target="#pane-defenders" type="button" role="tab">Defenders</button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+            <div class="tab-pane fade show active" id="pane-hitlimits" role="tabpanel">
+                {% if tab_error_hitlimits %}
+                <div class="alert alert-danger" style="background: rgba(255,90,90,.1); border-color: #ff5a5a; color: #ff5a5a; font-weight: 600;">
+                    Hit Limits: {{ tab_error_hitlimits }}
                 </div>
-                <button type="submit" id="submit-btn" class="btn-npo-primary w-100">Fetch &amp; Process</button>
+                {% endif %}
+
+                <div class="row g-3 align-items-end mt-1">
+                    <div class="col-md-3">
+                        <label for="defender_faction" class="form-label">Defender Faction ID<small style="opacity:0.7">(Optional)</small></label>
+                        <input type="text" class="form-control" name="defender_faction" id="defender_faction" value="{{ defender_faction }}" placeholder="e.g. 10123">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="limit_24h" class="form-label">Limit: 0-24H</label>
+                        <input type="number" class="form-control" name="limit_24h" id="limit_24h" value="{{ limit_24h }}" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="limit_48h" class="form-label">Limit: 0-48H</label>
+                        <input type="number" class="form-control" name="limit_48h" id="limit_48h" value="{{ limit_48h }}" required>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" name="show_tickets" id="show_tickets" {% if show_tickets %}checked{% endif %}>
+                            <label class="form-check-label" for="show_tickets">
+                            Show Tickets
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                {% if results %}
+                <div class="card-npo" style="padding: 0; overflow: hidden; margin-top: 18px;">
+                    {% if meta %}
+                    <div class="meta-bar">
+                        <span><strong style="color: var(--npo-text);">{{ meta.fetched }} attacks</strong>
+                        {% if meta.warnings %} ({{ meta.warnings }} malformed rows dropped){% endif %}
+                        — window {{ meta.window_start }} → {{ meta.window_end }}
+                        {% if meta.war %} · War: {{ meta.war }}{% endif %}
+                        {% if meta.restored %} · <span style="color: var(--npo-accent);">restored from cache</span>{% endif %}</span>
+                        <span class="tool-actions">
+                            <div class="form-check mb-0">
+                                <input class="form-check-input" type="checkbox" name="auto_refresh" id="auto-refresh" {% if auto_refresh %}checked{% endif %}>
+                                <label class="form-check-label" for="auto-refresh" style="color: var(--npo-sub); font-size:.85em;">Auto-refresh 30s</label>
+                            </div>
+                            <button type="button" id="refresh-live" class="btn-npo-primary" style="padding:8px 14px;">↺ Refresh</button>
+                            <a href="/" class="btn-npo-primary" style="text-decoration: none; padding:8px 14px;" id="start-over">↺ Start Over</a>
+                        </span>
+                    </div>
+                    {% endif %}
+                    <div class="table-responsive">
+                      <table class="table table-hover text-center">
+                        <thead>
+                          <tr>
+                            <th class="text-center" style="width: 40px; cursor: default;">#</th>
+                            <th class="text-start ps-2" data-sort="name" style="cursor: pointer; white-space: nowrap;">Attacker ⇅</th>
+                            <th data-sort="hits_24h" style="border-left: 1px solid rgba(26,34,44,.6); cursor: pointer;">24H Hits ⇅<br><small style="opacity:.7">Limit: {{ limit_24h }}</small></th>
+                            <th data-sort="hits_48h" style="cursor: pointer;">48H Hits ⇅<br><small style="opacity:.7">Limit: {{ limit_48h }}</small></th>
+                            <th data-sort="attacks" style="border-left: 1px solid rgba(26,34,44,.6); cursor: pointer;">Atk ⇅<br><small style="opacity:.7">(20t)</small></th>
+                            <th data-sort="assists" style="cursor: pointer;">Ast ⇅<br><small style="opacity:.7">(15t)*</small></th>
+                            <th data-sort="losses" style="cursor: pointer;">Loss ⇅<br><small style="opacity:.7">(15t)*</small></th>
+                            <th data-sort="respect" style="cursor: pointer;">Respect ⇅<br><small style="opacity:.7">gain</small></th>
+                            {% if show_tickets %}
+                            <th data-sort="tickets" style="border-left: 1px solid rgba(26,34,44,.6); background: rgba(255,217,74,.05); color: var(--npo-accent); cursor: pointer;">Total<br>Tickets ⇅</th>
+                            {% endif %}
+                          </tr>
+                        </thead>
+                        <tbody id="results-body">
+                          {% for row in results %}
+                          <tr>
+                            <td class="text-center" style="color: var(--npo-sub); font-weight: 600;">
+                              {{ forloop.counter }}
+                            </td>
+                            
+                            <td class="text-start ps-2 fw-bold" style="white-space: nowrap;">
+                              <a href="https://www.torn.com/profiles.php?XID={{ row.id }}" target="_blank" class="profile-link">
+                                {{ row.name }} [{{ row.id }}]
+                              </a>
+                            </td>
+                            
+                            <td style="border-left: 1px solid rgba(26,34,44,.4);" class="{% if row.over_24h %}cell-over{% else %}cell-safe{% endif %}">
+                              {{ row.hits_24h }}
+                            </td>
+                            <td class="{% if row.over_48h %}cell-over{% else %}cell-safe{% endif %}">
+                              {{ row.hits_48h }}
+                            </td>
+
+                            <td style="border-left: 1px solid rgba(26,34,44,.4);">{{ row.attacks }}</td>
+                            <td>{{ row.assists }}</td>
+                            <td>{{ row.losses }}</td>
+                            <td style="color: {{ row.respect_color }};">{{ row.respect|floatformat:2 }}</td>
+
+                            {% if show_tickets %}
+                            <td style="border-left: 1px solid rgba(26,34,44,.4); background: rgba(255,217,74,.05); color: var(--npo-accent); font-weight: 800; font-size: 1.1em;">
+                              {{ row.tickets }}
+                            </td>
+                            {% endif %}
+                          </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                    {% if show_tickets %}
+                    <div style="padding: 12px 20px; font-size: 0.85em; color: var(--npo-sub); border-top: 1px solid rgba(26,34,44,.6);">
+                      * Assists count for 15 tickets. Losses count for 15 tickets.
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="tab-pane fade" id="pane-chain" role="tabpanel">
+                {% if tab_error_chain %}
+                <div class="alert alert-danger" style="background: rgba(255,90,90,.1); border-color: #ff5a5a; color: #ff5a5a; font-weight: 600;">
+                    Chain: {{ tab_error_chain }}
+                </div>
+                {% endif %}
+
+                <div class="filter-row">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="successful_only" id="successful_only" data-auto-submit {% if successful_only %}checked{% endif %}>
+                        <label class="form-check-label" for="successful_only">Successful hits only</label>
+                    </div>
+                </div>
+
+                {% if chain %}
+                <div class="card-npo" style="padding: 0; overflow: hidden;">
+                    <div class="table-responsive" style="max-height: 70vh; overflow-y: auto;">
+                      <table class="table table-hover text-center">
+                        <thead>
+                          <tr>
+                            <th class="text-start ps-2">#</th>
+                            <th class="text-start ps-2">Time (UTC)</th>
+                            <th class="text-start ps-2">Attacker</th>
+                            <th class="text-start ps-2">Target</th>
+                            <th class="text-start ps-2">Defender Faction</th>
+                            <th>Result</th>
+                            <th>Respect</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for row in chain %}
+                          <tr>
+                            <td class="text-center" style="color: var(--npo-sub);">{{ forloop.counter }}</td>
+                            <td class="text-start ps-2" style="white-space: nowrap; color: var(--npo-sub);">{{ row.ts_human }}</td>
+                            <td class="text-start ps-2 fw-bold" style="white-space: nowrap;">
+                              <a href="https://www.torn.com/profiles.php?XID={{ row.attacker_id }}" target="_blank" class="profile-link">
+                                {{ row.attacker_name }} [{{ row.attacker_id }}]
+                              </a>
+                            </td>
+                            <td class="text-start ps-2" style="white-space: nowrap;">
+                              {% if row.defender_id %}
+                              <a href="https://www.torn.com/profiles.php?XID={{ row.defender_id }}" target="_blank" class="profile-link">
+                                {{ row.defender_name }} [{{ row.defender_id }}]
+                              </a>
+                              {% else %}
+                              —
+                              {% endif %}
+                            </td>
+                            <td class="text-start ps-2">{{ row.defender_faction_name|default:row.defender_faction|default:"—" }}</td>
+                            <td class="result-{{ row.result|lower }}">
+                              {% if row.dogpile %}<span class="badge-dogpile">DOGPILE</span> {% endif %}{{ row.result }}
+                            </td>
+                            <td style="color: {{ row.respect_color }};">
+                              {% if row.respect_gain > 0 %}+{% endif %}{{ row.respect_gain|floatformat:2 }}
+                            </td>
+                          </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                </div>
+                {% elif results %}
+                <p style="color: var(--npo-sub);">No attacks in this direction within the selected window.</p>
+                {% endif %}
+            </div>
+
+            <div class="tab-pane fade" id="pane-defenders" role="tabpanel">
+                {% if tab_error_defenders %}
+                <div class="alert alert-danger" style="background: rgba(255,90,90,.1); border-color: #ff5a5a; color: #ff5a5a; font-weight: 600;">
+                    Defenders: {{ tab_error_defenders }}
+                </div>
+                {% endif %}
+
+                <div class="filter-row">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="def_successful_only" id="def_successful_only" data-auto-submit {% if def_successful_only %}checked{% endif %}>
+                        <label class="form-check-label" for="def_successful_only">Successful hits only</label>
+                    </div>
+                    <div>
+                        <label for="dogpile_window" class="form-label">Group window (s)</label>
+                        <input type="number" class="form-control" name="dogpile_window" id="dogpile_window" value="{{ dogpile_window }}" min="1" max="3600" data-auto-submit style="width:110px;">
+                    </div>
+                    <div>
+                        <label for="dogpile_min" class="form-label">Min attackers</label>
+                        <input type="number" class="form-control" name="dogpile_min" id="dogpile_min" value="{{ dogpile_min }}" min="2" max="50" data-auto-submit style="width:110px;">
+                    </div>
+                    <div>
+                        <label for="heatmap_bucket" class="form-label">Heatmap bucket</label>
+                        <select class="form-select" name="heatmap_bucket" id="heatmap_bucket" data-auto-submit>
+                            <option value="15" {% if heatmap_bucket == 15 %}selected{% endif %}>15 min</option>
+                            <option value="30" {% if heatmap_bucket == 30 %}selected{% endif %}>30 min</option>
+                            <option value="60" {% if heatmap_bucket == 60 %}selected{% endif %}>1 hour</option>
+                            <option value="120" {% if heatmap_bucket == 120 %}selected{% endif %}>2 hours</option>
+                        </select>
+                    </div>
+                </div>
+
+                {% if dogpile %}
+                <h5 class="mt-2 mb-2" style="color: var(--npo-accent);">Dogpile events</h5>
+                <div class="card-npo mb-4" style="padding: 0; overflow: hidden;">
+                    <div class="table-responsive">
+                      <table class="table table-hover text-center">
+                        <thead>
+                          <tr>
+                            <th class="text-start ps-2">Start (UTC)</th>
+                            <th class="text-start ps-2">End (UTC)</th>
+                            <th class="text-start ps-2">Target</th>
+                            <th class="text-start ps-2">Attackers (hits)</th>
+                            <th>Hits</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for ev in dogpile %}
+                          <tr>
+                            <td class="text-start ps-2" style="white-space: nowrap; color: var(--npo-sub);">{{ ev.start_human }}</td>
+                            <td class="text-start ps-2" style="white-space: nowrap; color: var(--npo-sub);">{{ ev.end_human }}</td>
+                            <td class="text-start ps-2 fw-bold">
+                              <a href="https://www.torn.com/profiles.php?XID={{ ev.target_id }}" target="_blank" class="profile-link">
+                                {{ ev.target_name }} [{{ ev.target_id }}]
+                              </a>
+                            </td>
+                            <td class="text-start ps-2">
+                              {% for a in ev.attackers %}
+                              <a href="https://www.torn.com/profiles.php?XID={{ a.id }}" target="_blank" class="profile-link" style="margin-right: 8px;">{{ a.name }} ({{ a.hits }})</a>
+                              {% endfor %}
+                            </td>
+                            <td class="cell-over">{{ ev.hit_count }}</td>
+                          </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if def_chain %}
+                <h5 class="mt-2 mb-2" style="color: var(--npo-accent);">Enemy chain</h5>
+                <div class="card-npo mb-4" style="padding: 0; overflow: hidden;">
+                    <div class="table-responsive" style="max-height: 70vh; overflow-y: auto;">
+                      <table class="table table-hover text-center">
+                        <thead>
+                          <tr>
+                            <th class="text-start ps-2">#</th>
+                            <th class="text-start ps-2">Time (UTC)</th>
+                            <th class="text-start ps-2">Attacker (enemy)</th>
+                            <th class="text-start ps-2">Target (ours)</th>
+                            <th>Result</th>
+                            <th>Respect</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for row in def_chain %}
+                          <tr class="{% if row.dogpile %}row-dogpile{% endif %}">
+                            <td class="text-center" style="color: var(--npo-sub);">{{ forloop.counter }}</td>
+                            <td class="text-start ps-2" style="white-space: nowrap; color: var(--npo-sub);">{{ row.ts_human }}</td>
+                            <td class="text-start ps-2 fw-bold" style="white-space: nowrap;">
+                              <a href="https://www.torn.com/profiles.php?XID={{ row.attacker_id }}" target="_blank" class="profile-link">
+                                {{ row.attacker_name }} [{{ row.attacker_id }}]
+                              </a>
+                            </td>
+                            <td class="text-start ps-2" style="white-space: nowrap;">
+                              {% if row.defender_id %}
+                              <a href="https://www.torn.com/profiles.php?XID={{ row.defender_id }}" target="_blank" class="profile-link">
+                                {{ row.defender_name }} [{{ row.defender_id }}]
+                              </a>
+                              {% else %}
+                              —
+                              {% endif %}
+                            </td>
+                            <td class="result-{{ row.result|lower }}">
+                              {% if row.dogpile %}<span class="badge-dogpile">DOGPILE</span> {% endif %}{{ row.result }}
+                            </td>
+                            <td style="color: {{ row.respect_color }};">
+                              {% if row.respect_gain > 0 %}+{% endif %}{{ row.respect_gain|floatformat:2 }}
+                            </td>
+                          </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if heatmap and heatmap.rows %}
+                <h5 class="mt-2 mb-2" style="color: var(--npo-accent);">
+                    Enemy push heatmap <small style="opacity:.7; font-size:.7em;">({{ heatmap.bucket_minutes }}min buckets · all attacks)</small>
+                </h5>
+                <div class="card-npo" style="padding: 0; overflow: hidden;">
+                    <div class="table-responsive" style="max-height: 70vh; overflow-y: auto;">
+                      <table class="table table-sm hm-table">
+                        <thead>
+                          <tr>
+                            <th class="text-start ps-2" style="min-width: 140px;">Attacker</th>
+                            {% for label in heatmap.labels %}<th>{{ label }}</th>{% endfor %}
+                            <th>Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for row in heatmap.rows %}
+                          <tr>
+                            <td class="text-start ps-2 fw-bold" style="white-space: nowrap;">
+                              <a href="https://www.torn.com/profiles.php?XID={{ row.attacker_id }}" target="_blank" class="profile-link">{{ row.attacker_name }}</a>
+                            </td>
+                            {% for c in row.buckets %}
+                            <td class="hm-cell{% if not c %} hm-empty{% endif %}"
+                                {% if c %}style="background: rgba(42,122,191,{% widthratio c heatmap.max_bucket 85 %}%);" title="{{ row.attacker_name }}: {{ c }} hits in {{ forloop.parentloop.counter0 }} bucket"{% endif %}>
+                                {% if c %}{{ c }}{% endif %}
+                            </td>
+                            {% endfor %}
+                            <td class="hm-total">{{ row.total }}</td>
+                          </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                </div>
+                {% elif results %}
+                <p style="color: var(--npo-sub);">No incoming attacks in the selected window.</p>
+                {% endif %}
             </div>
         </div>
         </form>
   </div>
-
-  {% if results %}
-  <div class="mb-3 d-flex gap-2">
-    <a href="/" class="btn-npo-primary" style="text-decoration: none;">↺ Start Over</a>
-    <button type="button" id="refresh-live" class="btn-npo-primary">↺ Refresh Live</button>
-  </div>
-  <div class="card-npo" style="padding: 0; overflow: hidden;">
-    {% if meta %}
-    <div class="meta-bar">
-        <strong style="color: var(--npo-text);">{{ meta.fetched }} attacks</strong>
-        {% if meta.warnings %} ({{ meta.warnings }} malformed rows dropped){% endif %}
-        — window {{ meta.window_start }} → {{ meta.window_end }}
-        {% if meta.war %} · War: {{ meta.war }}{% endif %}
-    </div>
-    {% endif %}
-    <div class="table-responsive">
-      <table class="table table-hover text-center">
-        <thead>
-          <tr>
-            <th class="text-center" style="width: 40px; cursor: default;">#</th>
-            <th class="text-start ps-2" data-sort="name" style="cursor: pointer; white-space: nowrap;">Attacker ⇅</th>
-            <th data-sort="hits_24h" style="border-left: 1px solid rgba(26,34,44,.6); cursor: pointer;">24H Hits ⇅<br><small style="opacity:.7">Limit: {{ limit_24h }}</small></th>
-            <th data-sort="hits_48h" style="cursor: pointer;">48H Hits ⇅<br><small style="opacity:.7">Limit: {{ limit_48h }}</small></th>
-            <th data-sort="attacks" style="border-left: 1px solid rgba(26,34,44,.6); cursor: pointer;">Atk ⇅<br><small style="opacity:.7">(20t)</small></th>
-            <th data-sort="assists" style="cursor: pointer;">Ast ⇅<br><small style="opacity:.7">(15t)*</small></th>
-            <th data-sort="losses" style="cursor: pointer;">Loss ⇅<br><small style="opacity:.7">(15t)*</small></th>
-            <th data-sort="respect" style="cursor: pointer;">Respect ⇅<br><small style="opacity:.7">gain</small></th>
-            {% if show_tickets %}
-            <th data-sort="tickets" style="border-left: 1px solid rgba(26,34,44,.6); background: rgba(255,217,74,.05); color: var(--npo-accent); cursor: pointer;">Total<br>Tickets ⇅</th>
-            {% endif %}
-          </tr>
-        </thead>
-        <tbody id="results-body">
-          {% for row in results %}
-          <tr>
-            <td class="text-center" style="color: var(--npo-sub); font-weight: 600;">
-              {{ forloop.counter }}
-            </td>
-            
-            <td class="text-start ps-2 fw-bold" style="white-space: nowrap;">
-              <a href="https://www.torn.com/profiles.php?XID={{ row.id }}" target="_blank" class="profile-link">
-                {{ row.name }} [{{ row.id }}]
-              </a>
-            </td>
-            
-            <td style="border-left: 1px solid rgba(26,34,44,.4);" class="{% if row.over_24h %}cell-over{% else %}cell-safe{% endif %}">
-              {{ row.hits_24h }}
-            </td>
-            <td class="{% if row.over_48h %}cell-over{% else %}cell-safe{% endif %}">
-              {{ row.hits_48h }}
-            </td>
-
-            <td style="border-left: 1px solid rgba(26,34,44,.4);">{{ row.attacks }}</td>
-            <td>{{ row.assists }}</td>
-            <td>{{ row.losses }}</td>
-            <td style="color: var(--npo-accent);">{{ row.respect|floatformat:2 }}</td>
-
-            {% if show_tickets %}
-            <td style="border-left: 1px solid rgba(26,34,44,.4); background: rgba(255,217,74,.05); color: var(--npo-accent); font-weight: 800; font-size: 1.1em;">
-              {{ row.tickets }}
-            </td>
-            {% endif %}
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% if show_tickets %}
-    <div style="padding: 12px 20px; font-size: 0.85em; color: var(--npo-sub); border-top: 1px solid rgba(26,34,44,.6);">
-      * Assists count for 15 tickets. Losses count for 15 tickets.
-    </div>
-    {% endif %}
-  </div>
-  {% endif %}
 </main>
 
 <footer>
   <div class="foot-grid">
     <div>&copy; 2026 New Pacific Order</div>
-    <div>MilCom Tools</div>
+    <div>Built by <a href="https://www.torn.com/profiles.php?XID=3631033" target="_blank" class="profile-link">Pr0xyius [3631033]</a> — END is main</div>
   </div>
 </footer>
 
@@ -238,9 +513,13 @@
 
   const TORN_API = 'https://api.torn.com/v2';
   const KEY_STORE = 'torn_tracker_api_key';
+  const PAYLOAD_STORE = 'torn_tracker_payload_v2';
+  const RESTORE_FLAG = 'torn_tracker_restored';
   const PAGE_SIZE = 100;
   const PAGE_PACING_MS = 400;
   const MAX_PAGES = 90;
+  const AUTO_REFRESH_MS = 30000;
+  const MAX_PAYLOAD_BYTES = 2400000;
   const NPO_FACTION_IDS = [12645, 10610, 44758, 26885, 14052];
 
   const $ = (sel) => document.querySelector(sel);
@@ -257,15 +536,28 @@
     warEndTs: $('#war-end-ts'),
     warNameHidden: $('#war-name-hidden'),
     warOppHidden: $('#war-opp-hidden'),
+    factionNamesHidden: $('#faction-names-hidden'),
     defenderFaction: $('#defender_faction'),
     attacksHidden: $('#attacks-hidden'),
+    restoredHidden: $('#restored-hidden'),
     progressWrap: $('#fetch-progress-wrap'),
     progressBar: $('#fetch-progress-bar'),
     progressText: $('#fetch-progress-text'),
     refreshBtn: $('#refresh-live'),
+    autoRefresh: $('#auto-refresh'),
+    limit24h: $('#limit_24h'),
+    limit48h: $('#limit_48h'),
+    showTickets: $('#show_tickets'),
+    successfulOnly: $('#successful_only'),
+    defSuccessfulOnly: $('#def_successful_only'),
+    dogpileWindow: $('#dogpile_window'),
+    dogpileMin: $('#dogpile_min'),
+    heatmapBucket: $('#heatmap_bucket'),
   };
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  let refreshing = false;
+  let autoRefreshTimer = null;
 
   function fmtTs(ts) {
     if (!ts) return '';
@@ -328,15 +620,20 @@
     throw new Error(friendlyError(code, data && data.error));
   }
 
-  function compactRow(a) {
+  function compactRow(a, direction) {
+    const def = a.defender || {};
+    const atk = a.attacker || {};
     return [
       a.id,
       a.started,
-      a.attacker && a.attacker.id,
-      a.attacker && a.attacker.name,
-      (a.defender && a.defender.faction && a.defender.faction.id) || '',
+      atk.id,
+      atk.name,
+      def.id || '',
+      def.name || '',
+      (def.faction && def.faction.id) || '',
       a.result,
       a.respect_gain || 0,
+      direction,
     ];
   }
 
@@ -355,6 +652,16 @@
     try {
       const data = await apiFetch(TORN_API + '/faction/wars?key=' + encodeURIComponent(key));
       const wars = (data && data.wars) || {};
+
+      // Faction ID -> name map from every known war, for chain display names.
+      const fmap = {};
+      const addF = (f) => { if (f && f.id) fmap[f.id] = f.name; };
+      if (wars.ranked) (wars.ranked.factions || []).forEach(addF);
+      (['raids', 'territory']).forEach((k) => {
+        (wars[k] || []).forEach((w) => (w.factions || []).forEach(addF));
+      });
+      els.factionNamesHidden.value = JSON.stringify(fmap);
+
       const war = pickWar(wars);
       if (!war) {
         showWarInfo('No ranked war or raid detected — set the window manually below, or use a manual start time.');
@@ -392,7 +699,81 @@
     els.progressWrap.classList.add('d-none');
   }
 
+  function loadCache() {
+    try {
+      const raw = localStorage.getItem(PAYLOAD_STORE);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+
+  function saveCache(attacks, from, to, lastTs) {
+    const cache = {
+      attacks: attacks,
+      war_start: from,
+      war_end: to,
+      war_name: els.warNameHidden.value,
+      war_opponent: els.warOppHidden.value,
+      faction_names: els.factionNamesHidden.value,
+      last_ts: lastTs,
+      saved_at: Math.floor(Date.now() / 1000),
+      auto_refresh: els.autoRefresh ? els.autoRefresh.checked : false,
+      settings: {
+        limit_24h: els.limit24h && els.limit24h.value,
+        limit_48h: els.limit48h && els.limit48h.value,
+        defender_faction: els.defenderFaction && els.defenderFaction.value,
+        show_tickets: els.showTickets ? els.showTickets.checked : false,
+        successful_only: els.successfulOnly ? els.successfulOnly.checked : false,
+        def_successful_only: els.defSuccessfulOnly ? els.defSuccessfulOnly.checked : true,
+        dogpile_window: els.dogpileWindow ? els.dogpileWindow.value : 60,
+        dogpile_min: els.dogpileMin ? els.dogpileMin.value : 2,
+        heatmap_bucket: els.heatmapBucket ? els.heatmapBucket.value : 60,
+      },
+    };
+    try { localStorage.setItem(PAYLOAD_STORE, JSON.stringify(cache)); } catch (e) { /* full */ }
+  }
+
+  function startAutoRefresh() {
+    stopAutoRefresh();
+    autoRefreshTimer = setInterval(() => {
+      if (!refreshing) runLiveFetch();
+    }, AUTO_REFRESH_MS);
+  }
+
+  function stopAutoRefresh() {
+    if (autoRefreshTimer) {
+      clearInterval(autoRefreshTimer);
+      autoRefreshTimer = null;
+    }
+  }
+
+  async function fetchDirection(filters, from, to, direction, attacks, key) {
+    let url = TORN_API + '/faction/attacks?key=' + encodeURIComponent(key) +
+      '&limit=' + PAGE_SIZE + '&filters=' + filters + '&sort=asc&from=' + from +
+      (to !== null ? '&to=' + to : '');
+    let prevUrl = null;
+    let pages = 0;
+
+    while (url) {
+      if (++pages > MAX_PAGES) {
+        throw new Error('Fetch window too large (over ' + MAX_PAGES + ' pages) — narrow the time range and try again.');
+      }
+      const data = await apiFetch(url);
+      for (const a of (data.attacks || [])) {
+        attacks.set(a.id, compactRow(a, direction));
+      }
+      url = (data._metadata && data._metadata.links && data._metadata.links.next) || null;
+      if (url) url += '&key=' + encodeURIComponent(key); // next links omit the key
+      if (url === prevUrl) break;                        // cursor stall guard (inclusive boundaries)
+      prevUrl = url;
+      setProgress('Fetching ' + direction + ' attacks… page ' + pages +
+        ' (' + attacks.size + ' attacks so far)', Math.min(100, pages * 4));
+      if (url) await sleep(PAGE_PACING_MS);
+    }
+    return pages;
+  }
+
   async function runLiveFetch() {
+    if (refreshing) return;
     clearLiveError();
     const key = els.keyInput.value.trim();
     if (!key) { showLiveError('Enter your API key first.'); return; }
@@ -409,32 +790,25 @@
     els.warNameHidden.value = els.warNameHidden.value || '';
     els.warOppHidden.value = els.warOppHidden.value || '';
 
-    setProgress('Fetching attacks…');
-    const attacks = new Map();
-    let url = TORN_API + '/faction/attacks?key=' + encodeURIComponent(key) +
-      '&limit=' + PAGE_SIZE + '&filters=outgoing&sort=asc&from=' + from +
-      (to !== null ? '&to=' + to : '');
-    let prevUrl = null;
-    let pages = 0;
-
+    refreshing = true;
     try {
-      while (url) {
-        if (++pages > MAX_PAGES) {
-          throw new Error('Fetch window too large (over ' + MAX_PAGES + ' pages) — narrow the time range and try again.');
-        }
-        const data = await apiFetch(url);
-        for (const a of (data.attacks || [])) {
-          attacks.set(a.id, compactRow(a));
-        }
-        url = (data._metadata && data._metadata.links && data._metadata.links.next) || null;
-        if (url) url += '&key=' + encodeURIComponent(key); // next links omit the key
-        if (url === prevUrl) break;                        // cursor stall guard (inclusive boundaries)
-        prevUrl = url;
-        setProgress('Fetching attacks… page ' + pages + ' (' + attacks.size + ' attacks so far)', Math.min(100, pages * 4));
-        if (url) await sleep(PAGE_PACING_MS);
+      const cache = loadCache();
+      const sameWindow = cache && cache.attacks && cache.attacks.length &&
+        cache.war_start == from && String(cache.war_end || '') === String(to || '');
+      const incremental = !!sameWindow;
+      const fetchFrom = incremental ? cache.last_ts - 60 : from;
+
+      const attacks = new Map();
+      if (incremental) {
+        for (const r of cache.attacks) attacks.set(r[0], r);
       }
 
-      if (attacks.size === 0) {
+      setProgress(incremental ? 'Refreshing new attacks…' : 'Fetching attacks…');
+      await fetchDirection('outgoing', fetchFrom, to, 'out', attacks, key);
+      await fetchDirection('incoming', fetchFrom, to, 'in', attacks, key);
+
+      let arr = Array.from(attacks.values());
+      if (arr.length === 0) {
         if (from > Math.floor(Date.now() / 1000)) {
           showLiveError("This war hasn't started yet — it starts at " + fmtTs(from) + '. No attacks exist until then.');
         } else {
@@ -443,11 +817,30 @@
         return;
       }
 
-      els.attacksHidden.value = JSON.stringify(Array.from(attacks.values()));
+      // Keep the payload under the Django POST body cap: drop oldest rows first.
+      arr.sort((a, b) => b[1] - a[1]);
+      let json = JSON.stringify(arr);
+      while (json.length > MAX_PAYLOAD_BYTES && arr.length > 500) {
+        arr.pop();
+        json = JSON.stringify(arr);
+      }
+      if (arr.length <= 500 && json.length > MAX_PAYLOAD_BYTES) {
+        showLiveError('Attack payload too large for the server (over ' + Math.round(MAX_PAYLOAD_BYTES / 1e6) + 'MB) — narrow the war window.');
+        return;
+      }
+
+      saveCache(arr, from, to, arr[0][1]);
+      els.attacksHidden.value = json;
       els.form.submit();
     } catch (err) {
       hideProgress();
       showLiveError(err.message);
+      if (els.autoRefresh) {
+        els.autoRefresh.checked = false;
+        stopAutoRefresh();
+      }
+    } finally {
+      refreshing = false;
     }
   }
 
@@ -458,10 +851,72 @@
   });
   if (els.refreshBtn) els.refreshBtn.addEventListener('click', runLiveFetch);
 
+  if (els.autoRefresh) {
+    els.autoRefresh.addEventListener('change', () => {
+      if (els.autoRefresh.checked) {
+        startAutoRefresh();
+      } else {
+        stopAutoRefresh();
+      }
+      // Persist the toggle so a reload keeps the choice (no Torn call).
+      const cache = loadCache();
+      if (cache) {
+        cache.auto_refresh = els.autoRefresh.checked;
+        try { localStorage.setItem(PAYLOAD_STORE, JSON.stringify(cache)); } catch (e) { /* full */ }
+      }
+    });
+  }
+
+  // Tab filter controls re-submit the already-fetched payload (no Torn call).
+  document.querySelectorAll('[data-auto-submit]').forEach((el) => {
+    el.addEventListener('change', () => els.form.submit());
+  });
+
+  $('#start-over').addEventListener('click', (e) => {
+    e.preventDefault();
+    try { localStorage.removeItem(PAYLOAD_STORE); } catch (err) { /* private mode */ }
+    window.location.reload();
+  });
+
   // Prefill the stored key
   try { els.keyInput.value = localStorage.getItem(KEY_STORE) || ''; } catch (e) { /* private mode */ }
 
-  // --- Sortable results ---
+  // Restore the last fetched payload (no Torn calls) — once per load.
+  if (sessionStorage.getItem(RESTORE_FLAG)) {
+    sessionStorage.removeItem(RESTORE_FLAG);
+  } else {
+    const cache = loadCache();
+    if (cache && Array.isArray(cache.attacks) && cache.attacks.length) {
+      const now = Math.floor(Date.now() / 1000);
+      const warLongOver = cache.war_end && cache.war_end < now - 3600;
+      if (!warLongOver) {
+        els.warStartTs.value = cache.war_start || '';
+        els.warEndTs.value = cache.war_end || '';
+        els.warNameHidden.value = cache.war_name || '';
+        els.warOppHidden.value = cache.war_opponent || '';
+        els.factionNamesHidden.value = cache.faction_names || '';
+        els.attacksHidden.value = JSON.stringify(cache.attacks);
+        els.restoredHidden.value = '1';
+        const s = cache.settings || {};
+        if (els.limit24h && s.limit_24h) els.limit24h.value = s.limit_24h;
+        if (els.limit48h && s.limit_48h) els.limit48h.value = s.limit_48h;
+        if (els.defenderFaction && s.defender_faction !== undefined) els.defenderFaction.value = s.defender_faction;
+        if (els.showTickets) els.showTickets.checked = !!s.show_tickets;
+        if (els.successfulOnly) els.successfulOnly.checked = !!s.successful_only;
+        if (els.defSuccessfulOnly && s.def_successful_only !== undefined) els.defSuccessfulOnly.checked = !!s.def_successful_only;
+        if (els.dogpileWindow && s.dogpile_window) els.dogpileWindow.value = s.dogpile_window;
+        if (els.dogpileMin && s.dogpile_min) els.dogpileMin.value = s.dogpile_min;
+        if (els.heatmapBucket && s.heatmap_bucket) els.heatmapBucket.value = s.heatmap_bucket;
+        if (els.autoRefresh) els.autoRefresh.checked = !!cache.auto_refresh;
+        sessionStorage.setItem(RESTORE_FLAG, '1');
+        els.form.submit();
+      }
+    }
+  }
+
+  if (els.autoRefresh && els.autoRefresh.checked) startAutoRefresh();
+
+  // --- Sortable hit-limit results ---
   const tbody = document.getElementById('results-body');
   if (tbody) {
     const rows = Array.from(tbody.querySelectorAll('tr'));

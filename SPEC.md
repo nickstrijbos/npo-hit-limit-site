@@ -14,10 +14,10 @@ The browser:
 
 1. Calls `/v2/faction/wars` to auto-detect the current or upcoming ranked war and its declared start/end times (with a manual datetime fallback).
 2. Calls `/v2/faction` to learn the key owner's faction ID, then auto-fills the Defender Faction ID field with the war opponent's ID.
-3. Pulls all faction attacks from war start to now via `/v2/faction/attacks` (`filters=outgoing`, forward pagination via `_metadata.links.next`).
+3. Pulls all faction attacks from war start to now via `/v2/faction/attacks` in **both directions** (`filters=outgoing` + `filters=incoming`, forward pagination via `_metadata.links.next`), tagging each row with its direction.
 4. Posts compact attack rows to the page as a normal form submit.
 
-Django normalizes those rows into a pandas pipeline producing hit-limit, ticket (2/3 rule), and respect results. **CSV mode has been removed** — live is the only mode.
+Django normalizes those rows into a pandas pipeline producing three tab views: hit-limit/ticket stats, the faction chain log (outgoing, newest first), and the enemy/defender view (incoming chain + dogpile detection + push heatmap). **CSV mode has been removed** — live is the only mode.
 
 ## User Stories
 
@@ -54,7 +54,7 @@ Verified live against the Torn API (CORS: `access-control-allow-origin: *`, `acc
 ### API contract (verified with a live key)
 
 - **Wars**: `GET /v2/faction/wars?key=...` → `{pacts: [], wars: {ranked: {war_id, start, end, target, winner, factions: [{id, name, ...}, ...]}, raids: [...], territory: [...]}}`. `ranked` is a single object (current or upcoming war; `end` is `null` while upcoming/active); `raids`/`territory` are arrays. Example from live data: upcoming ranked war vs "Helvete X", `start` 1786629600, `end: null`.
-- **Attacks**: `GET /v2/faction/attacks?key=...&limit=100&filters=outgoing&sort=asc&from=<war_start>&to=<war_end|omitted>` → `attacks[]` + `_metadata.links.next`. Forward pagination: follow `links.next` until `null` (verified end-to-end: 3 pages, 247 attacks, correct boundaries). `to` bounds the far end and is preserved in `next` links. Boundaries are non-inclusive — no duplicate attacks across pages.
+- **Attacks**: `GET /v2/faction/attacks?key=...&limit=100&filters=outgoing&sort=asc&from=<war_start>&to=<war_end|omitted>` → `attacks[]` + `_metadata.links.next`. Forward pagination: follow `links.next` until `null` (verified end-to-end: 3 pages, 247 attacks, correct boundaries). `to` bounds the far end and is preserved in `next` links. Boundaries are non-inclusive — no duplicate attacks across pages. The same fetch is run a second time with `filters=incoming` (attacks against the key owner's faction); each direction's rows are tagged `'out'`/`'in'` client-side. `filters=incoming` was not yet live-verified at implementation time — see Verification below.
 - **Opponent detection**: no extra API call — since all users are NPO, Detect War identifies the war opponent as the first `war.factions` entry whose ID is **not** one of the known NPO faction IDs (12645, 10610, 44758, 26885, 14052), and auto-fills the Defender Faction ID field with it. Inter-NPO wars (both factions NPO) leave the field as-is. Clearing the field shows all hits including outside hits.
 - **Retention**: the attacks log reaches back ~1 year (verified: oldest attack ~360 days old). `from=0` is buggy (`next: null`) — irrelevant, we always send a real war-start timestamp.
 - **Rate limits**: 100 requests/min per key owner; the 30s service cache dedupes identical requests (repeated refreshes with a fixed window hit cache and don't consume quota).
@@ -69,14 +69,24 @@ War start = `wars.ranked.start` (official declared start — matches the existin
 The browser trims each attack to a fixed-width row before posting, keeping the POST well under Django's default 2.5MB body cap even for ~9k attacks:
 
 ```
-[id, started, attacker_id, attacker_name, defender_faction, result, respect_gain?]
+[id, started, attacker_id, attacker_name, defender_id, defender_name, defender_faction, result, respect_gain?, direction?]
 ```
 
-`defender_faction` = defender's **faction ID** (or empty; matches the Defender Faction ID form field, which Detect War auto-fills with the war opponent's ID), `result` = Torn result string. Dedupe by `id` client-side. Django validates types and drops malformed rows with a warning count.
+`defender_faction` = defender's **faction ID** (or empty; matches the Defender Faction ID form field, which Detect War auto-fills with the war opponent's ID), `defender_id`/`defender_name` = the target player, `result` = Torn result string, `direction` = `'out'`/`'in'` (defaults `'out'`). Dedupe by `id` client-side. Django validates types and drops malformed rows with a warning count.
+
+### Tab views (one POST feeds all three)
+
+- **Hit Limits** (unchanged behavior): `compute_stats()` per-member limits/tickets/respect, with the existing sortable table.
+- **Chain**: `build_chain(df, 'out', successful_only, faction_names)` — newest-first outgoing log with target + defender faction name (from the `faction_names` map gathered via Detect War) and color-coded respect (+green / −red / 0 gray).
+- **Defenders**: `build_chain(df, 'in', ...)` (enemy chain, rows flagged `dogpile`), `detect_group_attacks(df, window_s, min_attackers)` (dogpile events: ≥N distinct enemy attackers on the same NPO target within a window, successful hits only), and `build_heatmap(df, war_start, war_end, bucket_minutes)` (per-enemy-member activity grid across the war window — counts **all** incoming attacks as an activity signal, auto-coarsens granularity past 20k cells). All three are computed independently in `_compute_tabs()` — one tab failing renders a per-tab error line.
+
+### Client-side state & refresh
+
+The merged payload + window + settings are cached in `localStorage` (`torn_tracker_payload_v2`) after every successful fetch and **auto-re-submitted on page load** (zero Torn calls; `sessionStorage` guard prevents restore loops). Refresh / Auto-refresh (30s) run an *incremental* fetch (`from = last_ts - 60s`) merged into the cache. Payloads are trimmed to the POST body cap (oldest rows dropped first). Tab filter controls `data-auto-submit` re-POST the existing payload for a server-side re-render without touching the API.
 
 ### Single processing seam
 
-All stats computation lives in one pure function: `compute_stats(df, limit_24h, limit_48h, defender_faction, show_tickets)`. Live mode normalizes the compact rows into the DataFrame via `normalize_attacks()`. This is the **single seam** at which the feature is tested — every other moving part (row normalization, browser fetch) is thin and unchanged.
+All stats computation lives in pure functions over the normalized DataFrame: `compute_stats()` (hit limits/tickets — unchanged), `build_chain()`, `detect_group_attacks()`, `build_heatmap()`. Live mode normalizes the compact rows into the DataFrame via `normalize_attacks()`. These are the **seams** at which the feature is tested — every other moving part (row normalization, browser fetch) is thin and unchanged.
 
 ### Live mode is faction-agnostic
 
@@ -88,7 +98,7 @@ Per-member `respect` total = sum of `respect_gain` over the fetched window. Wind
 
 ### Client-side fetch behavior
 
-Sequential awaited pagination with ~400ms pacing between pages, capped at ~90 pages with a clear "window too large, narrow the range" error. Torn error payloads (`{"error": {code, error}}`) mapped to friendly messages: code 2 → bad key, code 5 → rate limited (retry once after a pause), code 16 → key access level too low, code 1 → key missing.
+Sequential awaited pagination with ~400ms pacing between pages, capped at ~90 pages with a clear "window too large, narrow the range" error. Torn error payloads (`{"error": {code, error}}`) mapped to friendly messages: code 2 → bad key, code 5 → rate limited (retry once after a pause), code 16 → key access level too low, code 1 → key missing. Runs twice per fetch (outgoing then incoming). Incremental refreshes start at `last_ts - 60s` and merge into the cached payload.
 
 ### Sorting and column indices
 
@@ -100,17 +110,20 @@ The fetch is client-side; `requests` is not needed. No DB/models changes (proces
 
 ## Testing Decisions
 
-- **What makes a good test here**: only external behavior of the seam — given a DataFrame of attacks (or compact rows), the computed per-member results are correct. No tests for Django request handling, the template, or network behavior (the browser fetch is not unit-testable in this codebase's current shape).
-- **Modules to test**: the extracted stats function (24h/48h window boundaries, over-limit flags, attack/assist/loss breakdown, 2/3-rule paid-losses cap, respect totals, defender-faction filter, empty-input errors) and the row-normalization function (malformed rows dropped, dedupe by id, missing defender faction).
-- **Prior art**: none — the project currently has zero tests; these are the first, using Django's built-in `TestCase`/`SimpleTestCase` with synthetic pandas DataFrames, run via `python manage.py test`.
+- **What makes a good test here**: only external behavior of the seams — given a DataFrame of attacks (or compact rows), the computed per-member results, chain rows, dogpile events and heatmap buckets are correct. No tests for Django request handling, the template, or network behavior (the browser fetch is not unit-testable in this codebase's current shape).
+- **Modules to test**: the extracted stats function (24h/48h window boundaries, over-limit flags, attack/assist/loss breakdown, 2/3-rule paid-losses cap, respect totals, defender-faction filter, empty-input errors), the row-normalization function (malformed rows dropped, dedupe by id, missing defender fields, direction validation), and the new seams (chain ordering/direction/success filters/faction names, dogpile window boundaries and distinct-attacker minimum, heatmap bucket boundaries/auto-coarsening).
+- **Prior art**: none — the project originally had zero tests; these are the first, using Django's built-in `TestCase`/`SimpleTestCase` with synthetic pandas DataFrames, run via `python manage.py test`.
 
 ## Out of Scope
 
-- Auto-refresh timer / polling while the page is open (a manual Refresh button is included; live-polling can be a follow-up).
-- Windowed (24h/48h) respect columns.
 - Server-side key storage or a shared multi-faction dashboard (deliberately avoided; keys stay browser-side).
 - Coverage of merc/guest or external hits — an inherent Torn API limitation (the reason CSV mode was dropped: it didn't change this, and live is the workflow that matters).
 - Push notifications / Discord integration.
+
+## Verification
+
+- `filters=outgoing` was live-verified previously (pagination, boundaries, `next`-link quirks).
+- Pending live verification (needs an NPO key): `filters=incoming` returns attacks against the key owner's faction; `respect_gain` sign on lost attacks; the incremental `from = last_ts - 60s` trickle against real page boundaries; heatmap bucket alignment with declared war start/end.
 
 ## Further Notes
 
