@@ -38,7 +38,7 @@ python manage.py migrate                # creates db.sqlite3 (gitignored) for /a
 - POST fields: `attacks` (JSON array of compact rows), `war_start`/`war_end` (unix ts), `war_name`, plus the shared limits/defender/tickets fields and `manual_start`/`manual_end` (datetime-local values, round-tripped so the form keeps state).
 - Compact row contract (server: `normalize_attacks()`): `[id, started, attacker_id, attacker_name, defender_faction, result, respect_gain?]` where `defender_faction` is the defender's **faction ID** (not name — filtering is by ID). Malformed rows are dropped with a warning count; duplicate ids keep the first; missing defender faction becomes `''`.
 - Live mode is faction-agnostic: **no NPO filter** (`filters=outgoing` scopes to the key owner).
-- **Detect War** also calls `/v2/faction` to learn the key owner's faction ID, then auto-fills the Defender Faction ID field with the war opponent's ID (first `war.factions` entry that isn't the owner). The lookup failing never fails detection.
+- **Detect War** auto-fills the Defender Faction ID field with the war opponent's ID — the first `war.factions` entry that isn't one of the known NPO faction IDs (12645, 10610, 44758, 26885, 14052). No `/v2/faction` call; inter-NPO wars leave the field as-is.
 - The client-side fetch has three Torn API quirks baked in (verified live, see SPEC.md): `next` links omit `key=` (must re-attach), page boundaries are **inclusive** (dedupe by id is mandatory), and the cursor can stall at the tail (`next` repeats) — the JS breaks when a `next` URL repeats itself, with a 90-page cap as a backstop.
 
 ## index.html client-side sorting

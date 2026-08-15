@@ -241,6 +241,7 @@
   const PAGE_SIZE = 100;
   const PAGE_PACING_MS = 400;
   const MAX_PAGES = 90;
+  const NPO_FACTION_IDS = [12645, 10610, 44758, 26885, 14052];
 
   const $ = (sel) => document.querySelector(sel);
 
@@ -371,15 +372,9 @@
       showWarInfo('<strong>' + label + '</strong><br>Start: ' + fmtTs(war.start) + ' · End: ' + endText +
         ' — <span style="opacity:.8">edit the fields below to override.</span>');
 
-      // Auto-fill the defender faction ID with the war opponent (never fails the detect)
-      try {
-        const me = await apiFetch(TORN_API + '/faction?key=' + encodeURIComponent(key));
-        const myId = me && me.faction && me.faction.id;
-        if (myId && Array.isArray(war.factions)) {
-          const opponent = war.factions.find((f) => f && f.id && String(f.id) !== String(myId));
-          if (opponent && opponent.id) els.defenderFaction.value = opponent.id;
-        }
-      } catch (e) { /* defender field stays as-is */ }
+      // Auto-fill the defender faction ID with the war opponent (first faction that isn't NPO)
+      const opponent = (war.factions || []).find((f) => f && f.id && !NPO_FACTION_IDS.includes(f.id));
+      if (opponent && opponent.id) els.defenderFaction.value = opponent.id;
     } catch (err) {
       showLiveError(err.message);
     } finally {
