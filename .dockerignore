@@ -1,0 +1,32 @@
+# VCS
+.git
+.gitignore
+
+# Environment
+.venv
+venv/
+env/
+.env
+.envrc
+
+# Django
+db.sqlite3
+db.sqlite3-journal
+local_settings.py
+*.log
+static/
+
+# Python
+__pycache__/
+*.py[codz]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Tooling / docs (not needed in the image)
+.idea/
+.vscode/
+Dockerfile
+.dockerignore
