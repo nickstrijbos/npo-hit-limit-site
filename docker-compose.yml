@@ -1,0 +1,14 @@
+services:
+  web:
+    build: .
+    image: ghcr.io/nickstrijbos/npo-hit-limit-site:latest
+    container_name: npo-war-room
+    ports:
+      - "8001:8000"
+    environment:
+      # Keep these in sync with what you actually reach the app on.
+      # settings.py defaults: 192.168.1.200,hitlimit.sterus.dev,localhost,127.0.0.1
+      ALLOWED_HOSTS: "npo-war-room.sterus.dev,localhost,127.0.0.1"
+      CSRF_TRUSTED_ORIGINS: "https://npo-war-room.sterus.dev,http://localhost:8001,http://127.0.0.1:8001"
+      DEBUG: "False"
+    restart: unless-stopped
